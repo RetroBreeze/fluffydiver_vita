@@ -23,13 +23,14 @@ set(VITA_APP_NAME "Fluffy Diver")
 set(VITA_TITLEID  "FLUF00001")
 set(VITA_VERSION  "01.00")
 
-# Define executable - NOW WITH FALSOJNI
+# Define executable - NOW WITH SAFE FUNCTION CALLER
 add_executable(fluffydiver
     src/main.c
     jni/jni_patch.c
     jni/android_stubs.c
     jni/so_util_simple.c
     jni/falsojni.c
+    jni/minimal_function_test.c  # ← Changed from safe_function_caller.c
 )
 
 # Include directories

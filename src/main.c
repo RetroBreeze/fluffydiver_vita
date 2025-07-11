@@ -44,6 +44,9 @@ extern int is_game_initialized();
 extern int is_game_paused();
 extern void create_asset_debug_files();
 
+// Function from minimal_function_test.c
+extern void test_all_functions();
+
 // Forward declarations for our functions
 static void stub_based_game_initialization(void);
 static void stub_based_game_loop(void);
@@ -77,7 +80,7 @@ static void init_debug_log() {
     }
 }
 
-static void debug_printf(const char *fmt, ...) {
+void debug_printf(const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
     vprintf(fmt, args);
@@ -210,16 +213,24 @@ static void stub_based_game_initialization() {
  * INTERACTIVE MODE
  */
 static void interactive_mode() {
-    debug_printf("Starting interactive mode...\n");
-    debug_printf("Controls: X=Red, Circle=Green, Triangle=Blue, Square=Yellow\n");
-    debug_printf("L1=Call OnGameUpdate, R1=Call OnGameInitialize\n");
-    debug_printf("Press Start+Select to exit\n");
+    debug_printf("=== ENHANCED INTERACTIVE MODE ===\n");
+    debug_printf("Controls:\n");
+    debug_printf("  X = Test OnGameInitialize discovery\n");
+    debug_printf("  Circle = Test OnGameUpdate discovery\n");
+    debug_printf("  Triangle = Test OnLibraryInitialized discovery\n");
+    debug_printf("  Square = Test SetResourcePath discovery\n");
+    debug_printf("  L1 = Call OnGameUpdate stub\n");
+    debug_printf("  R1 = Call OnGameInitialize stub\n");
+    debug_printf("  UP = Test ALL function discovery\n");
+    debug_printf("  DOWN = Ready for real function calls\n");
+    debug_printf("  LEFT = Test REAL function calls\n");
+    debug_printf("  Start+Select = Exit\n");
 
     JNIEnv *env = (JNIEnv*)get_jni_env();
     int frame_count = 0;
     int last_button_state = 0;
 
-    debug_color_change("CYAN - Interactive Mode", 0.0f, 1.0f, 1.0f);
+    debug_color_change("CYAN - Enhanced Interactive Mode", 0.0f, 1.0f, 1.0f);
 
     while (game_running) {
         SceCtrlData pad;
@@ -231,51 +242,169 @@ static void interactive_mode() {
             break;
         }
 
-        // Interactive function testing
+        // New button functionality
         if (pad.buttons != last_button_state) {
-            if (pad.buttons & SCE_CTRL_LTRIGGER) {
+            if (pad.buttons & SCE_CTRL_CROSS) {
+                debug_printf("=== TESTING OnGameInitialize DISCOVERY ===\n");
+                debug_color_change("RED - Testing Function Discovery", 1.0f, 0.0f, 0.0f);
+
+                // Test function discovery
+                if (so_functions_resolved()) {
+                    uintptr_t func_addr = so_symbol(NULL, "Java_com_hotdog_jni_Natives_OnGameInitialize");
+                    if (func_addr) {
+                        debug_printf("SUCCESS: OnGameInitialize found at 0x%08x\n", func_addr);
+                        debug_printf("Function is within module bounds: %s\n",
+                                     (func_addr >= (uintptr_t)so_get_base() &&
+                                     func_addr < (uintptr_t)so_get_base() + so_get_size()) ? "YES" : "NO");
+                        debug_printf("Function alignment: %s\n", (func_addr & 1) ? "THUMB" : "ARM");
+                        debug_color_change("GREEN - Function Found", 0.0f, 1.0f, 0.0f);
+                    } else {
+                        debug_printf("FAILED: OnGameInitialize not found\n");
+                        debug_color_change("RED - Function Not Found", 1.0f, 0.0f, 0.0f);
+                    }
+                } else {
+                    debug_printf("FAILED: Functions not resolved\n");
+                    debug_color_change("RED - No Functions", 1.0f, 0.0f, 0.0f);
+                }
+
+            } else if (pad.buttons & SCE_CTRL_CIRCLE) {
+                debug_printf("=== TESTING OnGameUpdate DISCOVERY ===\n");
+                debug_color_change("GREEN - Testing Function Discovery", 0.0f, 1.0f, 0.0f);
+
+                if (so_functions_resolved()) {
+                    uintptr_t func_addr = so_symbol(NULL, "Java_com_hotdog_jni_Natives_OnGameUpdate");
+                    if (func_addr) {
+                        debug_printf("SUCCESS: OnGameUpdate found at 0x%08x\n", func_addr);
+                        debug_printf("Function is within module bounds: %s\n",
+                                     (func_addr >= (uintptr_t)so_get_base() &&
+                                     func_addr < (uintptr_t)so_get_base() + so_get_size()) ? "YES" : "NO");
+                        debug_color_change("GREEN - Function Found", 0.0f, 1.0f, 0.0f);
+                    } else {
+                        debug_printf("FAILED: OnGameUpdate not found\n");
+                        debug_color_change("RED - Function Not Found", 1.0f, 0.0f, 0.0f);
+                    }
+                }
+
+            } else if (pad.buttons & SCE_CTRL_TRIANGLE) {
+                debug_printf("=== TESTING OnLibraryInitialized DISCOVERY ===\n");
+                debug_color_change("BLUE - Testing Function Discovery", 0.0f, 0.0f, 1.0f);
+
+                if (so_functions_resolved()) {
+                    uintptr_t func_addr = so_symbol(NULL, "Java_com_hotdog_libraryInterface_hdNativeInterface_OnLibraryInitialized");
+                    if (func_addr) {
+                        debug_printf("SUCCESS: OnLibraryInitialized found at 0x%08x\n", func_addr);
+                        debug_printf("This is the function that was crashing!\n");
+                        debug_printf("Function is within module bounds: %s\n",
+                                     (func_addr >= (uintptr_t)so_get_base() &&
+                                     func_addr < (uintptr_t)so_get_base() + so_get_size()) ? "YES" : "NO");
+                        debug_color_change("BLUE - Function Found", 0.0f, 0.0f, 1.0f);
+                    } else {
+                        debug_printf("FAILED: OnLibraryInitialized not found\n");
+                        debug_color_change("RED - Function Not Found", 1.0f, 0.0f, 0.0f);
+                    }
+                }
+
+            } else if (pad.buttons & SCE_CTRL_SQUARE) {
+                debug_printf("=== TESTING SetResourcePath DISCOVERY ===\n");
+                debug_color_change("YELLOW - Testing Function Discovery", 1.0f, 1.0f, 0.0f);
+
+                if (so_functions_resolved()) {
+                    uintptr_t func_addr = so_symbol(NULL, "Java_com_hotdog_libraryInterface_hdNativeInterface_SetResourcePath");
+                    if (func_addr) {
+                        debug_printf("SUCCESS: SetResourcePath found at 0x%08x\n", func_addr);
+                        debug_printf("Function is within module bounds: %s\n",
+                                     (func_addr >= (uintptr_t)so_get_base() &&
+                                     func_addr < (uintptr_t)so_get_base() + so_get_size()) ? "YES" : "NO");
+                        debug_color_change("YELLOW - Function Found", 1.0f, 1.0f, 0.0f);
+                    } else {
+                        debug_printf("FAILED: SetResourcePath not found\n");
+                        debug_color_change("RED - Function Not Found", 1.0f, 0.0f, 0.0f);
+                    }
+                }
+
+            } else if (pad.buttons & SCE_CTRL_LTRIGGER) {
                 debug_printf("L1 pressed - calling OnGameUpdate stub\n");
+                debug_color_change("PURPLE - Calling Stub", 1.0f, 0.0f, 1.0f);
                 Java_com_hotdog_jni_Natives_OnGameUpdate(env, NULL);
-            }
-            if (pad.buttons & SCE_CTRL_RTRIGGER) {
+
+            } else if (pad.buttons & SCE_CTRL_RTRIGGER) {
                 debug_printf("R1 pressed - calling OnGameInitialize stub\n");
+                debug_color_change("ORANGE - Calling Stub", 1.0f, 0.5f, 0.0f);
                 Java_com_hotdog_jni_Natives_OnGameInitialize(env, NULL);
+
+            } else if (pad.buttons & SCE_CTRL_UP) {
+                debug_printf("=== TESTING ALL FUNCTION DISCOVERY ===\n");
+                debug_color_change("MAGENTA - Testing All Functions", 1.0f, 0.0f, 1.0f);
+
+                const char* test_functions[] = {
+                    "Java_com_hotdog_jni_Natives_OnGameInitialize",
+                    "Java_com_hotdog_jni_Natives_OnGameUpdate",
+                    "Java_com_hotdog_jni_Natives_OnGamePause",
+                    "Java_com_hotdog_jni_Natives_OnGameResume",
+                    "Java_com_hotdog_jni_Natives_OnGameTouchEvent",
+                    "Java_com_hotdog_jni_Natives_OnGameBack",
+                    "Java_com_hotdog_libraryInterface_hdNativeInterface_SetResourcePath",
+                    "Java_com_hotdog_libraryInterface_hdNativeInterface_SetFilePath",
+                    "Java_com_hotdog_libraryInterface_hdNativeInterface_OnLibraryInitialized",
+                    "Java_com_hotdog_libraryInterface_hdNativeInterface_OnPlaySoundComplete",
+                    "Java_com_hotdog_jni_Natives_onCashUpdate",
+                    "Java_com_hotdog_jni_Natives_onLanguage",
+                    "Java_com_hotdog_jni_Natives_onHotDogCreate",
+                    NULL
+                };
+
+                int found_count = 0;
+                for (int i = 0; test_functions[i] != NULL; i++) {
+                    uintptr_t func_addr = so_symbol(NULL, test_functions[i]);
+                    if (func_addr) {
+                        debug_printf("✅ %s: 0x%08x\n", test_functions[i], func_addr);
+                        found_count++;
+                    } else {
+                        debug_printf("❌ %s: NOT FOUND\n", test_functions[i]);
+                    }
+                }
+
+                debug_printf("=== SUMMARY: %d/13 functions found ===\n", found_count);
+                if (found_count == 13) {
+                    debug_color_change("GREEN - All Functions Found", 0.0f, 1.0f, 0.0f);
+                } else {
+                    debug_color_change("ORANGE - Some Functions Missing", 1.0f, 0.5f, 0.0f);
+                }
+
+            } else if (pad.buttons & SCE_CTRL_LEFT) {
+                debug_printf("=== TESTING REAL FUNCTION CALLS ===\n");
+                debug_color_change("WHITE - Testing Real Functions", 1.0f, 1.0f, 1.0f);
+                test_all_functions();
+
+            } else if (pad.buttons & SCE_CTRL_DOWN) {
+                debug_printf("=== READY FOR REAL FUNCTION CALLS ===\n");
+                debug_color_change("WHITE - Ready for Real Functions", 1.0f, 1.0f, 1.0f);
+                debug_printf("All systems tested and working!\n");
+                debug_printf("Next: Enable real function calls with proper FalsoJNI\n");
+                debug_printf("Module base: %p\n", so_get_base());
+                debug_printf("Module size: %zu\n", so_get_size());
+                debug_printf("FalsoJNI env: %p\n", env);
             }
         }
 
-        // Show debug colors based on input
-        if (pad.buttons & SCE_CTRL_CROSS) {
-            glClearColor(1.0f, 0.0f, 0.0f, 1.0f);  // Red
-        } else if (pad.buttons & SCE_CTRL_CIRCLE) {
-            glClearColor(0.0f, 1.0f, 0.0f, 1.0f);  // Green
-        } else if (pad.buttons & SCE_CTRL_TRIANGLE) {
-            glClearColor(0.0f, 0.0f, 1.0f, 1.0f);  // Blue
-        } else if (pad.buttons & SCE_CTRL_SQUARE) {
-            glClearColor(1.0f, 1.0f, 0.0f, 1.0f);  // Yellow
-        } else {
+        // Default color cycling
+        if (pad.buttons == 0) {
             glClearColor(0.0f, 1.0f, 1.0f, 1.0f);  // Cyan (default)
         }
 
         glClear(GL_COLOR_BUFFER_BIT);
         vglSwapBuffers(GL_FALSE);
 
-        // Log button changes
-        if (pad.buttons != last_button_state && pad.buttons != 0) {
-            debug_printf("Button pressed: 0x%08x\n", pad.buttons);
-        }
         last_button_state = pad.buttons;
 
         // Periodic status report
         frame_count++;
-        if (frame_count % 600 == 0) {
-            debug_printf("Frame %d - Interactive mode, game_init=%d, paused=%d\n",
-                         frame_count, is_game_initialized(), is_game_paused());
+        if (frame_count % 1800 == 0) {  // Every 30 seconds
+            debug_printf("Enhanced interactive mode - Frame %d\n", frame_count);
         }
 
         usleep(16666); // ~60fps
     }
-
-    debug_printf("Interactive mode ended\n");
 }
 
 /*
