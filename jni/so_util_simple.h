@@ -5,7 +5,7 @@
 #include <stddef.h>
 
 /*
- * Simple so-loader API
+ * Enhanced so-loader API with actual function dispatch
  * Compatible with the main so-loader interface
  */
 
@@ -25,5 +25,16 @@ void so_cleanup();
 int so_is_loaded();
 void *so_get_base();
 size_t so_get_size();
+
+// NEW: Function dispatcher for calling actual game code
+void so_call_game_init();
+void so_call_game_update();
+void so_call_game_touch(int x, int y, int action);
+void so_call_game_pause();
+void so_call_game_resume();
+void so_call_game_back();
+
+// NEW: Check if functions are resolved
+int so_functions_resolved();
 
 #endif // SO_UTIL_SIMPLE_H

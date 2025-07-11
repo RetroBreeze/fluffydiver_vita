@@ -3,6 +3,7 @@
 #include <string.h>
 #include <psp2/ctrl.h>
 #include <psp2/touch.h>
+#include "so_util_simple.h"
 
 // JNI type definitions for so-loader compatibility
 typedef struct _JavaVM JavaVM;
@@ -32,52 +33,64 @@ static int menu_phase = 0;  // 0=init, 1=title, 2=game
 void Java_com_hotdog_jni_Natives_OnGameTouchEvent(JNIEnv *env, jobject obj, int x, int y, int action);
 
 /*
- * JNI FUNCTION IMPLEMENTATIONS
- * These match the exact signatures from your libFluffyDiver.so
+ * JNI FUNCTION IMPLEMENTATIONS - WITH ACTUAL GAME FUNCTION CALLS
+ * These now call the real game functions from the loaded .so file
  */
 
 // Game Lifecycle Functions
 JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_OnGameInitialize(JNIEnv *env, jobject obj) {
     printf("[JNI] OnGameInitialize called\n");
+
+    // Call the actual game initialization function
+    if (so_functions_resolved()) {
+        printf("[JNI] Calling real game initialization\n");
+        so_call_game_init();
+    } else {
+        printf("[JNI] Warning: Game functions not resolved, running stub mode\n");
+    }
+
     game_initialized = 1;
     menu_phase = 1;  // Move to title screen phase
-    
+
     // Initialize touch
     sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG);
     sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, 1);
     sceTouchSetSamplingState(SCE_TOUCH_PORT_BACK, 0);
-    
-    // Send initial touch event to potentially trigger title screen
-    printf("[JNI] Sending initial touch event to start game\n");
-    Java_com_hotdog_jni_Natives_OnGameTouchEvent(env, obj, 480, 272, 1);  // Center screen tap
+
+    printf("[JNI] OnGameInitialize completed\n");
 }
 
 JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_OnGameUpdate(JNIEnv *env, jobject obj) {
-    // This is called every frame - only log important state changes
+    // Call the actual game update function
+    if (so_functions_resolved()) {
+        so_call_game_update();
+    }
+
+    // Keep our existing auto-progression logic as fallback
     static int frame_count = 0;
     static int last_log_phase = -1;
-    
+
     frame_count++;
-    
+
     // Log phase changes
     if (menu_phase != last_log_phase) {
-        printf("[JNI] Game phase changed: %d -> %d (frame %d)\n", 
+        printf("[JNI] Game phase changed: %d -> %d (frame %d)\n",
                last_log_phase, menu_phase, frame_count);
         last_log_phase = menu_phase;
     }
-    
-    // Auto-progress through menus by sending touch events
+
+    // Auto-progress through menus by sending touch events (as fallback)
     if (frame_count % 180 == 0) {  // Every 3 seconds
         switch (menu_phase) {
             case 1:  // Title screen - tap to start
                 printf("[JNI] Auto-tapping to start game (frame %d)\n", frame_count);
-                Java_com_hotdog_jni_Natives_OnGameTouchEvent(env, obj, 480, 400, 1);  // Start button area
+                Java_com_hotdog_jni_Natives_OnGameTouchEvent(env, obj, 480, 400, 1);
                 menu_phase = 2;
                 break;
             case 2:  // Game screen - tap to dive
                 if (!game_started) {
                     printf("[JNI] Auto-tapping to begin diving (frame %d)\n", frame_count);
-                    Java_com_hotdog_jni_Natives_OnGameTouchEvent(env, obj, 480, 272, 1);  // Center tap
+                    Java_com_hotdog_jni_Natives_OnGameTouchEvent(env, obj, 480, 272, 1);
                     game_started = 1;
                 }
                 break;
@@ -87,11 +100,23 @@ JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_OnGameUpdate(JNIEnv *env, job
 
 JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_OnGamePause(JNIEnv *env, jobject obj) {
     printf("[JNI] OnGamePause called\n");
+
+    // Call the actual game pause function
+    if (so_functions_resolved()) {
+        so_call_game_pause();
+    }
+
     game_paused = 1;
 }
 
 JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_OnGameResume(JNIEnv *env, jobject obj) {
     printf("[JNI] OnGameResume called\n");
+
+    // Call the actual game resume function
+    if (so_functions_resolved()) {
+        so_call_game_resume();
+    }
+
     game_paused = 0;
 }
 
@@ -99,22 +124,30 @@ JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_OnGameResume(JNIEnv *env, job
 JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_OnGameTouchEvent(JNIEnv *env, jobject obj, int x, int y, int action) {
     // action: 0 = touch up, 1 = touch down, 2 = touch move
     printf("[JNI] Touch event sent to game: x=%d, y=%d, action=%d\n", x, y, action);
-    
-    // The game should process this touch event and potentially change state
-    // This is where the game would load assets, transition screens, etc.
+
+    // Call the actual game touch function
+    if (so_functions_resolved()) {
+        so_call_game_touch(x, y, action);
+    }
 }
 
 JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_OnGameBack(JNIEnv *env, jobject obj) {
     printf("[JNI] OnGameBack called\n");
-    // Handle back button - could exit game or return to menu
+
+    // Call the actual game back function
+    if (so_functions_resolved()) {
+        so_call_game_back();
+    }
 }
 
 // Resource Management Functions
 JNIEXPORT void JNICALL Java_com_hotdog_libraryInterface_hdNativeInterface_SetResourcePath(JNIEnv *env, jobject obj, jstring path) {
     printf("[JNI] SetResourcePath called - setting to ux0:data/fluffydiver/\n");
-    
-    // The game is asking where to find its assets
-    // This is a critical call - the game needs to know the asset path
+
+    // This is critical - the game needs to know where to find its assets
+    // We need to somehow pass this information to the actual game code
+    // For now, we'll assume the game will try to open files and our
+    // android_fopen() redirect will handle the path mapping
 }
 
 JNIEXPORT void JNICALL Java_com_hotdog_libraryInterface_hdNativeInterface_SetFilePath(JNIEnv *env, jobject obj, jstring path) {
@@ -154,7 +187,7 @@ void handle_vita_input_to_game(JNIEnv *env, jobject obj) {
     static SceCtrlData last_pad = {0};
     SceCtrlData pad;
     sceCtrlPeekBufferPositive(0, &pad, 1);
-    
+
     // Convert Vita controls to touch events
     if (pad.buttons != last_pad.buttons) {
         if (pad.buttons & SCE_CTRL_CROSS) {
@@ -174,7 +207,7 @@ void handle_vita_input_to_game(JNIEnv *env, jobject obj) {
             Java_com_hotdog_jni_Natives_OnGameBack(env, obj);
         }
     }
-    
+
     last_pad = pad;
 }
 
