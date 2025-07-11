@@ -23,12 +23,13 @@ set(VITA_APP_NAME "Fluffy Diver")
 set(VITA_TITLEID  "FLUF00001")
 set(VITA_VERSION  "01.00")
 
-# Define executable
+# Define executable - NOW WITH FALSOJNI
 add_executable(fluffydiver
     src/main.c
     jni/jni_patch.c
     jni/android_stubs.c
     jni/so_util_simple.c
+    jni/falsojni.c
 )
 
 # Include directories
@@ -47,7 +48,7 @@ target_link_libraries(fluffydiver
     vitashark
     SceShaccCgExt
     
-    # Graphics system libraries (confirmed to exist)
+    # Graphics system libraries
     SceGxm_stub
     SceDisplay_stub
     SceCommonDialog_stub
@@ -70,7 +71,7 @@ target_link_libraries(fluffydiver
     SceShaccCg_stub
     taihen_stub
     
-    # Math libraries for VitaGL (missing functions)
+    # Math libraries for VitaGL
     mathneon
     
     # DMA library alternative

@@ -1,0 +1,173 @@
+/*
+ * Minimal JNI Patch - Pure stubs with no real function calls
+ * This replaces your jni_patch.c temporarily for testing
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <psp2/ctrl.h>
+#include <psp2/touch.h>
+
+// JNI type definitions
+typedef void* JNIEnv;
+typedef void* JavaVM;
+typedef void* jobject;
+typedef void* jstring;
+
+// Function calling convention
+#define JNIEXPORT
+#define JNICALL
+
+// Game state - pure local tracking
+static int game_initialized = 0;
+static int game_paused = 0;
+static int menu_phase = 0;
+static int game_started = 0;
+
+/*
+ * MINIMAL JNI FUNCTION IMPLEMENTATIONS
+ * These do NOT call any real game functions - pure stubs only
+ */
+
+JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_OnGameInitialize(JNIEnv *env, jobject obj) {
+    printf("[JNI STUB] OnGameInitialize called - STUB ONLY\n");
+    printf("[JNI STUB] env=%p, obj=%p\n", env, obj);
+    
+    // Just set our local state - don't call any real functions
+    game_initialized = 1;
+    menu_phase = 1;
+    
+    printf("[JNI STUB] OnGameInitialize completed successfully (stub mode)\n");
+}
+
+JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_OnGameUpdate(JNIEnv *env, jobject obj) {
+    static int call_count = 0;
+    call_count++;
+    
+    // Only log occasionally to avoid spam
+    if (call_count % 300 == 0) {
+        printf("[JNI STUB] OnGameUpdate #%d - STUB ONLY (env=%p)\n", call_count, env);
+    }
+    
+    // Simple auto-progression logic (stub version)
+    static int frame_count = 0;
+    frame_count++;
+    
+    if (frame_count % 180 == 0) {
+        switch (menu_phase) {
+            case 1:  // Title screen
+                printf("[JNI STUB] Auto-progression: Title -> Game (frame %d)\n", frame_count);
+                menu_phase = 2;
+                break;
+            case 2:  // Game screen
+                if (!game_started) {
+                    printf("[JNI STUB] Auto-progression: Starting dive (frame %d)\n", frame_count);
+                    game_started = 1;
+                }
+                break;
+        }
+    }
+}
+
+JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_OnGamePause(JNIEnv *env, jobject obj) {
+    printf("[JNI STUB] OnGamePause called - STUB ONLY\n");
+    game_paused = 1;
+}
+
+JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_OnGameResume(JNIEnv *env, jobject obj) {
+    printf("[JNI STUB] OnGameResume called - STUB ONLY\n");
+    game_paused = 0;
+}
+
+JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_OnGameTouchEvent(JNIEnv *env, jobject obj, int x, int y, int action) {
+    printf("[JNI STUB] Touch event - STUB ONLY: x=%d, y=%d, action=%d\n", x, y, action);
+}
+
+JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_OnGameBack(JNIEnv *env, jobject obj) {
+    printf("[JNI STUB] OnGameBack called - STUB ONLY\n");
+}
+
+// Resource Management Functions - STUBS ONLY
+JNIEXPORT void JNICALL Java_com_hotdog_libraryInterface_hdNativeInterface_SetResourcePath(JNIEnv *env, jobject obj, jstring path) {
+    printf("[JNI STUB] SetResourcePath called - STUB ONLY\n");
+    printf("[JNI STUB] Path would be set to: ux0:data/fluffydiver/\n");
+}
+
+JNIEXPORT void JNICALL Java_com_hotdog_libraryInterface_hdNativeInterface_SetFilePath(JNIEnv *env, jobject obj, jstring path) {
+    printf("[JNI STUB] SetFilePath called - STUB ONLY\n");
+}
+
+JNIEXPORT void JNICALL Java_com_hotdog_libraryInterface_hdNativeInterface_OnLibraryInitialized(JNIEnv *env, jobject obj) {
+    printf("[JNI STUB] OnLibraryInitialized called - STUB ONLY\n");
+    printf("[JNI STUB] env=%p, obj=%p\n", env, obj);
+    printf("[JNI STUB] Library initialization completed (stub mode)\n");
+}
+
+// Audio Functions - STUBS ONLY
+JNIEXPORT void JNICALL Java_com_hotdog_libraryInterface_hdNativeInterface_OnPlaySoundComplete(JNIEnv *env, jobject obj, int sound_id) {
+    printf("[JNI STUB] OnPlaySoundComplete: sound_id=%d - STUB ONLY\n", sound_id);
+}
+
+// Monetization Functions - STUBS ONLY
+JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_onCashUpdate(JNIEnv *env, jobject obj, int cash_amount) {
+    printf("[JNI STUB] onCashUpdate: cash=%d - STUB ONLY\n", cash_amount);
+}
+
+// Language/Localization Functions - STUBS ONLY
+JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_onLanguage(JNIEnv *env, jobject obj, jstring language) {
+    printf("[JNI STUB] onLanguage called - STUB ONLY\n");
+}
+
+// Initialization Functions - STUBS ONLY
+JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_onHotDogCreate(JNIEnv *env, jobject obj) {
+    printf("[JNI STUB] onHotDogCreate called - STUB ONLY\n");
+}
+
+/*
+ * INITIALIZATION FUNCTION FOR JNI ENVIRONMENT - MINIMAL VERSION
+ */
+int setup_enhanced_jni_environment() {
+    printf("[JNI STUB] Setting up minimal stub environment...\n");
+    printf("[JNI STUB] No real JNI environment needed for pure stubs\n");
+    return 0;
+}
+
+/*
+ * CLEANUP FUNCTION - MINIMAL VERSION
+ */
+void cleanup_enhanced_jni_environment() {
+    printf("[JNI STUB] Cleaning up stub environment\n");
+}
+
+/*
+ * ACCESSOR FUNCTIONS - MINIMAL VERSION
+ */
+void* get_jni_env() {
+    // Return a dummy pointer that won't be NULL
+    static int dummy_env = 1;
+    return &dummy_env;
+}
+
+void* get_java_vm() {
+    // Return a dummy pointer that won't be NULL
+    static int dummy_vm = 1;
+    return &dummy_vm;
+}
+
+// Utility functions
+int is_game_initialized() { 
+    return game_initialized; 
+}
+
+int is_game_paused() { 
+    return game_paused; 
+}
+
+int get_game_phase() { 
+    return menu_phase; 
+}
+
+void set_touch_enabled(int enabled) {
+    printf("[JNI STUB] Touch enabled set to: %d\n", enabled);
+}

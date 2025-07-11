@@ -1,3 +1,8 @@
+/*
+ * Complete FalsoJNI JNI Patch - Calls real game functions through FalsoJNI
+ * Clean version with no compilation errors
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5,92 +10,108 @@
 #include <psp2/touch.h>
 #include "so_util_simple.h"
 
-// JNI type definitions for so-loader compatibility
-typedef struct _JavaVM JavaVM;
-typedef struct _JNIEnv JNIEnv;
+// JNI type definitions
+typedef void* JNIEnv;
+typedef void* JavaVM;
 typedef void* jobject;
 typedef void* jstring;
 
-// JNI function calling convention
+// Function calling convention
 #define JNIEXPORT
 #define JNICALL
 
-// Global variables for game state
-static int game_initialized = 0;
-static int game_paused = 0;
-static float screen_width = 960.0f;
-static float screen_height = 544.0f;
-
-// Touch input mapping
-static SceTouchData touch_data;
-static int touch_enabled = 1;
-
-// Game state tracking
-static int game_started = 0;
-static int menu_phase = 0;  // 0=init, 1=title, 2=game
-
-// Forward declarations
+// Forward declaration to fix compilation warning
 void Java_com_hotdog_jni_Natives_OnGameTouchEvent(JNIEnv *env, jobject obj, int x, int y, int action);
 
+// Game state
+static int game_initialized = 0;
+static int game_paused = 0;
+static int menu_phase = 0;
+static int game_started = 0;
+
+// FalsoJNI environment access
+extern JNIEnv* falsojni_get_env();
+extern JavaVM* falsojni_get_vm();
+
 /*
- * JNI FUNCTION IMPLEMENTATIONS - WITH ACTUAL GAME FUNCTION CALLS
- * These now call the real game functions from the loaded .so file
+ * ENHANCED JNI FUNCTION IMPLEMENTATIONS
+ * Now calls REAL game functions through FalsoJNI
  */
 
-// Game Lifecycle Functions
 JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_OnGameInitialize(JNIEnv *env, jobject obj) {
-    printf("[JNI] OnGameInitialize called\n");
-
-    // Call the actual game initialization function
+    printf("[JNI] OnGameInitialize - Enhanced with FalsoJNI\n");
+    
+    // Use FalsoJNI environment
+    JNIEnv *falsojni_env = falsojni_get_env();
+    
+    // Call the actual game initialization function with FalsoJNI environment
     if (so_functions_resolved()) {
-        printf("[JNI] Calling real game initialization\n");
-        so_call_game_init();
+        printf("[JNI] Calling real game initialization with FalsoJNI environment: %p\n", falsojni_env);
+        
+        // Get the actual function pointer
+        uintptr_t func_addr = so_symbol(NULL, "Java_com_hotdog_jni_Natives_OnGameInitialize");
+        if (func_addr) {
+            // Cast to proper function type and call
+            typedef void (*jni_func_t)(JNIEnv*, jobject);
+            jni_func_t game_init = (jni_func_t)func_addr;
+            
+            printf("[JNI] Calling game function at 0x%08x with FalsoJNI env=%p, obj=%p\n", 
+                   func_addr, falsojni_env, obj);
+            
+            game_init(falsojni_env, obj);
+            
+            printf("[JNI] Game initialization function returned successfully\n");
+        } else {
+            printf("[JNI] ERROR: Could not find OnGameInitialize function\n");
+        }
     } else {
-        printf("[JNI] Warning: Game functions not resolved, running stub mode\n");
+        printf("[JNI] Running in stub mode - game functions not resolved\n");
     }
 
     game_initialized = 1;
-    menu_phase = 1;  // Move to title screen phase
+    menu_phase = 1;
 
-    // Initialize touch
-    sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG);
-    sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, 1);
-    sceTouchSetSamplingState(SCE_TOUCH_PORT_BACK, 0);
-
-    printf("[JNI] OnGameInitialize completed\n");
+    printf("[JNI] OnGameInitialize completed successfully\n");
 }
 
 JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_OnGameUpdate(JNIEnv *env, jobject obj) {
+    static int call_count = 0;
+    call_count++;
+    
+    // Use FalsoJNI environment
+    JNIEnv *falsojni_env = falsojni_get_env();
+
     // Call the actual game update function
     if (so_functions_resolved()) {
-        so_call_game_update();
+        uintptr_t func_addr = so_symbol(NULL, "Java_com_hotdog_jni_Natives_OnGameUpdate");
+        if (func_addr) {
+            typedef void (*jni_func_t)(JNIEnv*, jobject);
+            jni_func_t game_update = (jni_func_t)func_addr;
+            
+            // Only log occasionally to avoid spam
+            if (call_count % 300 == 0) {
+                printf("[JNI] Calling real OnGameUpdate #%d with FalsoJNI env=%p\n", call_count, falsojni_env);
+            }
+            
+            game_update(falsojni_env, obj);
+        }
     }
 
-    // Keep our existing auto-progression logic as fallback
+    // Keep auto-progression logic as fallback
     static int frame_count = 0;
-    static int last_log_phase = -1;
-
     frame_count++;
 
-    // Log phase changes
-    if (menu_phase != last_log_phase) {
-        printf("[JNI] Game phase changed: %d -> %d (frame %d)\n",
-               last_log_phase, menu_phase, frame_count);
-        last_log_phase = menu_phase;
-    }
-
-    // Auto-progress through menus by sending touch events (as fallback)
-    if (frame_count % 180 == 0) {  // Every 3 seconds
+    if (frame_count % 180 == 0) {
         switch (menu_phase) {
-            case 1:  // Title screen - tap to start
-                printf("[JNI] Auto-tapping to start game (frame %d)\n", frame_count);
-                Java_com_hotdog_jni_Natives_OnGameTouchEvent(env, obj, 480, 400, 1);
+            case 1:  // Title screen
+                printf("[JNI] Auto-progression: Title -> Game (frame %d)\n", frame_count);
+                Java_com_hotdog_jni_Natives_OnGameTouchEvent(falsojni_env, obj, 480, 400, 1);
                 menu_phase = 2;
                 break;
-            case 2:  // Game screen - tap to dive
+            case 2:  // Game screen
                 if (!game_started) {
-                    printf("[JNI] Auto-tapping to begin diving (frame %d)\n", frame_count);
-                    Java_com_hotdog_jni_Natives_OnGameTouchEvent(env, obj, 480, 272, 1);
+                    printf("[JNI] Auto-progression: Starting dive (frame %d)\n", frame_count);
+                    Java_com_hotdog_jni_Natives_OnGameTouchEvent(falsojni_env, obj, 480, 272, 1);
                     game_started = 1;
                 }
                 break;
@@ -99,131 +120,174 @@ JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_OnGameUpdate(JNIEnv *env, job
 }
 
 JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_OnGamePause(JNIEnv *env, jobject obj) {
-    printf("[JNI] OnGamePause called\n");
+    printf("[JNI] OnGamePause with FalsoJNI environment\n");
+    
+    JNIEnv *falsojni_env = falsojni_get_env();
 
-    // Call the actual game pause function
     if (so_functions_resolved()) {
-        so_call_game_pause();
+        uintptr_t func_addr = so_symbol(NULL, "Java_com_hotdog_jni_Natives_OnGamePause");
+        if (func_addr) {
+            typedef void (*jni_func_t)(JNIEnv*, jobject);
+            jni_func_t game_pause = (jni_func_t)func_addr;
+            game_pause(falsojni_env, obj);
+        }
     }
 
     game_paused = 1;
 }
 
 JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_OnGameResume(JNIEnv *env, jobject obj) {
-    printf("[JNI] OnGameResume called\n");
+    printf("[JNI] OnGameResume with FalsoJNI environment\n");
+    
+    JNIEnv *falsojni_env = falsojni_get_env();
 
-    // Call the actual game resume function
     if (so_functions_resolved()) {
-        so_call_game_resume();
+        uintptr_t func_addr = so_symbol(NULL, "Java_com_hotdog_jni_Natives_OnGameResume");
+        if (func_addr) {
+            typedef void (*jni_func_t)(JNIEnv*, jobject);
+            jni_func_t game_resume = (jni_func_t)func_addr;
+            game_resume(falsojni_env, obj);
+        }
     }
 
     game_paused = 0;
 }
 
-// Input Functions
 JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_OnGameTouchEvent(JNIEnv *env, jobject obj, int x, int y, int action) {
-    // action: 0 = touch up, 1 = touch down, 2 = touch move
-    printf("[JNI] Touch event sent to game: x=%d, y=%d, action=%d\n", x, y, action);
+    printf("[JNI] Touch event: x=%d, y=%d, action=%d\n", x, y, action);
+    
+    JNIEnv *falsojni_env = falsojni_get_env();
 
-    // Call the actual game touch function
     if (so_functions_resolved()) {
-        so_call_game_touch(x, y, action);
+        uintptr_t func_addr = so_symbol(NULL, "Java_com_hotdog_jni_Natives_OnGameTouchEvent");
+        if (func_addr) {
+            // Touch events might have different signatures, but try basic approach first
+            typedef void (*jni_func_t)(JNIEnv*, jobject, int, int, int);
+            jni_func_t game_touch = (jni_func_t)func_addr;
+            game_touch(falsojni_env, obj, x, y, action);
+        }
     }
 }
 
 JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_OnGameBack(JNIEnv *env, jobject obj) {
-    printf("[JNI] OnGameBack called\n");
+    printf("[JNI] OnGameBack with FalsoJNI environment\n");
+    
+    JNIEnv *falsojni_env = falsojni_get_env();
 
-    // Call the actual game back function
     if (so_functions_resolved()) {
-        so_call_game_back();
+        uintptr_t func_addr = so_symbol(NULL, "Java_com_hotdog_jni_Natives_OnGameBack");
+        if (func_addr) {
+            typedef void (*jni_func_t)(JNIEnv*, jobject);
+            jni_func_t game_back = (jni_func_t)func_addr;
+            game_back(falsojni_env, obj);
+        }
     }
 }
 
-// Resource Management Functions
+// Resource management - CRITICAL for asset loading
 JNIEXPORT void JNICALL Java_com_hotdog_libraryInterface_hdNativeInterface_SetResourcePath(JNIEnv *env, jobject obj, jstring path) {
-    printf("[JNI] SetResourcePath called - setting to ux0:data/fluffydiver/\n");
+    printf("[JNI] SetResourcePath - configuring asset path with FalsoJNI\n");
+    
+    JNIEnv *falsojni_env = falsojni_get_env();
 
-    // This is critical - the game needs to know where to find its assets
-    // We need to somehow pass this information to the actual game code
-    // For now, we'll assume the game will try to open files and our
-    // android_fopen() redirect will handle the path mapping
+    if (so_functions_resolved()) {
+        uintptr_t func_addr = so_symbol(NULL, "Java_com_hotdog_libraryInterface_hdNativeInterface_SetResourcePath");
+        if (func_addr) {
+            typedef void (*jni_func_t)(JNIEnv*, jobject, jstring);
+            jni_func_t set_path = (jni_func_t)func_addr;
+            
+            printf("[JNI] Calling SetResourcePath with NULL path (will be fixed later)\n");
+            set_path(falsojni_env, obj, NULL);
+        }
+    }
 }
 
 JNIEXPORT void JNICALL Java_com_hotdog_libraryInterface_hdNativeInterface_SetFilePath(JNIEnv *env, jobject obj, jstring path) {
-    printf("[JNI] SetFilePath called - setting to ux0:data/fluffydiver/\n");
-}
+    printf("[JNI] SetFilePath - configuring file path with FalsoJNI\n");
+    
+    JNIEnv *falsojni_env = falsojni_get_env();
 
-// Audio Functions
-JNIEXPORT void JNICALL Java_com_hotdog_libraryInterface_hdNativeInterface_OnPlaySoundComplete(JNIEnv *env, jobject obj, int sound_id) {
-    printf("[JNI] OnPlaySoundComplete: sound_id=%d\n", sound_id);
-    // Audio callback - called when sound finishes playing
-}
-
-// Monetization Functions
-JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_onCashUpdate(JNIEnv *env, jobject obj, int cash_amount) {
-    printf("[JNI] onCashUpdate: cash=%d\n", cash_amount);
-    // Handle in-app purchase updates - likely safe to ignore for homebrew
-}
-
-// Language/Localization Functions
-JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_onLanguage(JNIEnv *env, jobject obj, jstring language) {
-    printf("[JNI] onLanguage called - setting to English\n");
-}
-
-// Initialization Functions
-JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_onHotDogCreate(JNIEnv *env, jobject obj) {
-    printf("[JNI] onHotDogCreate called\n");
-    // Early initialization - called before OnGameInitialize
+    if (so_functions_resolved()) {
+        uintptr_t func_addr = so_symbol(NULL, "Java_com_hotdog_libraryInterface_hdNativeInterface_SetFilePath");
+        if (func_addr) {
+            typedef void (*jni_func_t)(JNIEnv*, jobject, jstring);
+            jni_func_t set_path = (jni_func_t)func_addr;
+            
+            printf("[JNI] Calling SetFilePath with NULL path (will be fixed later)\n");
+            set_path(falsojni_env, obj, NULL);
+        }
+    }
 }
 
 JNIEXPORT void JNICALL Java_com_hotdog_libraryInterface_hdNativeInterface_OnLibraryInitialized(JNIEnv *env, jobject obj) {
-    printf("[JNI] OnLibraryInitialized called\n");
-    // Library-level initialization
-}
+    printf("[JNI] OnLibraryInitialized with FalsoJNI environment\n");
+    
+    JNIEnv *falsojni_env = falsojni_get_env();
 
-// Enhanced input handling for Vita controls
-void handle_vita_input_to_game(JNIEnv *env, jobject obj) {
-    static SceCtrlData last_pad = {0};
-    SceCtrlData pad;
-    sceCtrlPeekBufferPositive(0, &pad, 1);
-
-    // Convert Vita controls to touch events
-    if (pad.buttons != last_pad.buttons) {
-        if (pad.buttons & SCE_CTRL_CROSS) {
-            printf("[JNI] X pressed - sending dive touch\n");
-            Java_com_hotdog_jni_Natives_OnGameTouchEvent(env, obj, 480, 272, 1);  // Dive
-        }
-        if (pad.buttons & SCE_CTRL_CIRCLE) {
-            printf("[JNI] Circle pressed - sending surface touch\n");
-            Java_com_hotdog_jni_Natives_OnGameTouchEvent(env, obj, 480, 200, 1);  // Surface
-        }
-        if (pad.buttons & SCE_CTRL_START) {
-            printf("[JNI] Start pressed - sending menu touch\n");
-            Java_com_hotdog_jni_Natives_OnGameTouchEvent(env, obj, 480, 400, 1);  // Menu area
-        }
-        if (pad.buttons & SCE_CTRL_SELECT) {
-            printf("[JNI] Select pressed - calling OnGameBack\n");
-            Java_com_hotdog_jni_Natives_OnGameBack(env, obj);
+    if (so_functions_resolved()) {
+        uintptr_t func_addr = so_symbol(NULL, "Java_com_hotdog_libraryInterface_hdNativeInterface_OnLibraryInitialized");
+        if (func_addr) {
+            typedef void (*jni_func_t)(JNIEnv*, jobject);
+            jni_func_t lib_init = (jni_func_t)func_addr;
+            
+            printf("[JNI] Calling real OnLibraryInitialized with FalsoJNI env=%p\n", falsojni_env);
+            lib_init(falsojni_env, obj);
+            printf("[JNI] OnLibraryInitialized returned successfully\n");
         }
     }
-
-    last_pad = pad;
 }
 
-// Utility Functions
-int is_game_initialized() {
-    return game_initialized;
+JNIEXPORT void JNICALL Java_com_hotdog_libraryInterface_hdNativeInterface_OnPlaySoundComplete(JNIEnv *env, jobject obj, int sound_id) {
+    printf("[JNI] OnPlaySoundComplete: sound_id=%d\n", sound_id);
+    
+    JNIEnv *falsojni_env = falsojni_get_env();
+
+    if (so_functions_resolved()) {
+        uintptr_t func_addr = so_symbol(NULL, "Java_com_hotdog_libraryInterface_hdNativeInterface_OnPlaySoundComplete");
+        if (func_addr) {
+            typedef void (*jni_func_t)(JNIEnv*, jobject, int);
+            jni_func_t sound_complete = (jni_func_t)func_addr;
+            sound_complete(falsojni_env, obj, sound_id);
+        }
+    }
 }
 
-int is_game_paused() {
-    return game_paused;
+JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_onCashUpdate(JNIEnv *env, jobject obj, int cash_amount) {
+    printf("[JNI] onCashUpdate: cash=%d\n", cash_amount);
+    // Monetization function - safe to stub for homebrew
 }
 
-int get_game_phase() {
-    return menu_phase;
+JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_onLanguage(JNIEnv *env, jobject obj, jstring language) {
+    printf("[JNI] onLanguage called\n");
+    // Language setting - safe to stub
 }
 
-void set_touch_enabled(int enabled) {
-    touch_enabled = enabled;
+JNIEXPORT void JNICALL Java_com_hotdog_jni_Natives_onHotDogCreate(JNIEnv *env, jobject obj) {
+    printf("[JNI] onHotDogCreate with FalsoJNI environment\n");
+    
+    JNIEnv *falsojni_env = falsojni_get_env();
+
+    if (so_functions_resolved()) {
+        uintptr_t func_addr = so_symbol(NULL, "Java_com_hotdog_jni_Natives_onHotDogCreate");
+        if (func_addr) {
+            typedef void (*jni_func_t)(JNIEnv*, jobject);
+            jni_func_t hotdog_create = (jni_func_t)func_addr;
+            printf("[JNI] Calling real onHotDogCreate with FalsoJNI env=%p\n", falsojni_env);
+            hotdog_create(falsojni_env, obj);
+            printf("[JNI] onHotDogCreate returned successfully\n");
+        }
+    }
+}
+
+// Utility functions
+int is_game_initialized() { 
+    return game_initialized; 
+}
+
+int is_game_paused() { 
+    return game_paused; 
+}
+
+int get_game_phase() { 
+    return menu_phase; 
 }
