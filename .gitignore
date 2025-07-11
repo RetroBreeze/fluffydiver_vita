@@ -1,0 +1,117 @@
+# Fluffy Diver PS Vita Port - .gitignore
+
+# ======================
+# COPYRIGHTED CONTENT
+# ======================
+# Never commit copyrighted game assets or binaries
+lib/libFluffyDiver.so
+assets/
+!assets/README.md
+
+# ======================
+# BUILD OUTPUT
+# ======================
+build/
+*.vpk
+*.self
+*.elf
+*.velf
+*.bin
+
+# ======================
+# DEBUG/LOG FILES
+# ======================
+*.log
+debug.log
+asset_access.log
+directory_listing.txt
+test_file_creation.txt
+
+# ======================
+# DEVELOPMENT FILES
+# ======================
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# ======================
+# CMAKE BUILD FILES
+# ======================
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# ======================
+# TEMPORARY FILES
+# ======================
+*.tmp
+*.temp
+*.bak
+*.orig
+
+# ======================
+# COMPILER OUTPUT
+# ======================
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dll
+*.dylib
+
+# ======================
+# ARCHIVE FILES
+# ======================
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+
+# ======================
+# DOCUMENTATION BUILD
+# ======================
+*.pdf
+*.docx
+*.doc
+
+# ======================
+# ALLOW THESE FILES
+# ======================
+# Keep README files
+!README.md
+!*/README.md
+
+# Keep source code
+!*.c
+!*.h
+!*.cpp
+!*.hpp
+
+# Keep build configuration
+!CMakeLists.txt
+
+# Keep documentation
+!*.md
+!LICENSE
+!.gitignore
