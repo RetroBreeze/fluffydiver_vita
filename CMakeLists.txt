@@ -23,8 +23,8 @@ add_executable(fluffydiver
   src/main.c
   src/so_util.c
   src/jni_patch.c
+  src/android_patch.c  # Add this line
   src/default_dynlib.c
-  src/android_api.c
   src/io_patch.c
   src/pthread_patch.c
   src/sys_utils.c

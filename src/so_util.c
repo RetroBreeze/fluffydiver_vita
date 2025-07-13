@@ -471,3 +471,17 @@ void hook_addr(uintptr_t addr, uintptr_t dst) {
 int ret0() {
     return 0;
 }
+
+// Add these functions to your existing so_util.c file, after the existing ret0() function
+
+int ret1() {
+    return 1;
+}
+
+int retminus1() {
+    return -1;
+}
+
+void *retNULL() {
+    return NULL;
+}

@@ -1,5 +1,6 @@
 /*
- * Fluffy Diver PS Vita - Based on GTA SA Vita by TheOfficialFloW
+ * main.c - Based on GTA SA Vita entry point methodology
+ * Simplified to follow exact GTA SA Vita pattern
  */
 
 #include <psp2/io/dirent.h>
@@ -169,186 +170,112 @@ int main(int argc, char *argv[]) {
 
     debugPrintf("Setting up JNI...\n");
     // Setup JNI
+    debugPrintf("About to call jni_init()...\n");
     jni_init();
+    debugPrintf("jni_init() completed successfully\n");
 
     debugPrintf("Flushing caches...\n");
     // Flush caches - CRITICAL STEP FROM GTA SA VITA
+    debugPrintf("About to flush caches...\n");
     so_flush_caches(&fluffydiver_mod);
+    debugPrintf("Cache flush completed\n");
 
     debugPrintf("Initializing module...\n");
     // Initialize module - CRITICAL STEP FROM GTA SA VITA
+    debugPrintf("About to initialize module...\n");
     if (so_initialize(&fluffydiver_mod) < 0) {
         fatal_error("Failed to initialize module");
     }
-    debugPrintf("Module initialized\n");
+    debugPrintf("Module initialization completed\n");
 
     // Show yellow screen before calling game
     glClearColor(1.0f, 1.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     vglSwapBuffers(GL_FALSE);
 
-    debugPrintf("=== ENTRY POINT DISCOVERY ===\n");
-    debugPrintf("Following GTA SA Vita methodology to find correct entry point\n");
+    debugPrintf("=== GTA SA VITA ENTRY POINT PATTERN ===\n");
 
-    // GTA SA Vita approach: Scan for all possible entry points first
-    const char* entry_points[] = {
-        "JNI_OnLoad",                                    // Standard Android JNI initialization
-        "Java_com_hotdog_jni_Natives_init",              // Game-specific init
-        "Java_com_hotdog_jni_Natives_nativeInit",        // Alternative init
-        "Java_com_hotdog_jni_Natives_onCreate",          // Activity lifecycle
-        "Java_com_hotdog_jni_Natives_onHotDogCreate",    // Game-specific create
-        "Java_com_hotdog_jni_Natives_onStart",           // Activity start
-        "Java_com_hotdog_jni_Natives_onResume",          // Activity resume
-        "android_main",                                   // Native activity main
-        "main",                                           // Standard main
-        NULL
-    };
+    // GTA SA Vita approach: Direct symbol lookup and calling
+    uintptr_t entry_addr = so_symbol(&fluffydiver_mod, "Java_com_hotdog_jni_Natives_onHotDogCreate");
 
-    debugPrintf("Scanning symbol table for available entry points:\n");
-    int found_entry_points = 0;
-    uintptr_t jni_onload_addr = 0;
-    uintptr_t primary_entry_addr = 0;
-    const char* primary_entry_name = NULL;
+    if (entry_addr == 0) {
+        debugPrintf("Entry point not found, trying alternatives...\n");
 
-    for (int i = 0; entry_points[i] != NULL; i++) {
-        uintptr_t addr = so_symbol(&fluffydiver_mod, entry_points[i]);
-        if (addr != 0) {
-            debugPrintf("  ✓ Found: %s at 0x%08X\n", entry_points[i], addr);
-            found_entry_points++;
+        // Try other common entry points
+        const char* alternatives[] = {
+            "JNI_OnLoad",
+            "Java_com_hotdog_jni_Natives_init",
+            "Java_com_hotdog_jni_Natives_nativeInit",
+            "android_main",
+            "main",
+            NULL
+        };
 
-            // Remember JNI_OnLoad for later
-            if (strcmp(entry_points[i], "JNI_OnLoad") == 0) {
-                jni_onload_addr = addr;
+        for (int i = 0; alternatives[i] != NULL; i++) {
+            entry_addr = so_symbol(&fluffydiver_mod, alternatives[i]);
+            if (entry_addr != 0) {
+                debugPrintf("Found alternative entry point: %s at 0x%08X\n", alternatives[i], entry_addr);
+                break;
             }
-
-            // Remember first game-specific entry point
-            if (!primary_entry_addr && strstr(entry_points[i], "Java_com_hotdog")) {
-                primary_entry_addr = addr;
-                primary_entry_name = entry_points[i];
-            }
-
-            // If no game-specific entry found, try android_main
-            if (!primary_entry_addr && strcmp(entry_points[i], "android_main") == 0) {
-                primary_entry_addr = addr;
-                primary_entry_name = entry_points[i];
-            }
-
-            // Last resort: main
-            if (!primary_entry_addr && strcmp(entry_points[i], "main") == 0) {
-                primary_entry_addr = addr;
-                primary_entry_name = entry_points[i];
-            }
-        } else {
-            debugPrintf("  ✗ Not found: %s\n", entry_points[i]);
         }
     }
 
-    debugPrintf("Found %d entry points total\n", found_entry_points);
-
-    if (found_entry_points == 0) {
-        fatal_error("No entry points found in library");
+    if (entry_addr == 0) {
+        fatal_error("No entry point found");
     }
 
-    // GTA SA Vita pattern: Call JNI_OnLoad first if available
-    if (jni_onload_addr != 0) {
-        debugPrintf("=== CALLING JNI_OnLoad ===\n");
-        debugPrintf("Standard Android pattern: Initialize JNI environment first\n");
+    debugPrintf("=== CALLING ENTRY POINT ===\n");
+    debugPrintf("Entry point address: 0x%08X\n", entry_addr);
 
-        // JNI_OnLoad signature: jint JNI_OnLoad(JavaVM* vm, void* reserved)
-        int (*jni_onload)(void*, void*) = (int(*)(void*, void*))jni_onload_addr;
-
-        // Create fake JavaVM structure (GTA SA Vita approach)
-        static struct {
-            void* functions;
-            void* reserved[3];
-        } fake_javavm = { NULL, {NULL, NULL, NULL} };
-
-        debugPrintf("Calling JNI_OnLoad(JavaVM=%p, reserved=NULL)\n", &fake_javavm);
-
-        // Purple screen for JNI_OnLoad
-        glClearColor(1.0f, 0.0f, 1.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-        vglSwapBuffers(GL_FALSE);
-
-        // Flush logs before calling
-        if (debug_log) fflush(debug_log);
-        if (debug_fd >= 0) sceIoClose(debug_fd);
-
-        int result = jni_onload(&fake_javavm, NULL);
-
-        // Reopen debug log
-        debug_fd = sceIoOpen("ux0:data/fluffydiver/debug_direct.log", SCE_O_WRONLY | SCE_O_APPEND, 0777);
-
-        debugPrintf("JNI_OnLoad returned: %d\n", result);
-
-        if (result > 0) {
-            debugPrintf("✓ JNI_OnLoad succeeded!\n");
-            // Green screen for JNI_OnLoad success
-            glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT);
-            vglSwapBuffers(GL_FALSE);
-        } else {
-            debugPrintf("⚠ JNI_OnLoad returned error, but continuing...\n");
-            // Yellow screen for warning
-            glClearColor(1.0f, 1.0f, 0.0f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT);
-            vglSwapBuffers(GL_FALSE);
-        }
-
-        sceKernelDelayThread(500000); // 0.5 second delay to see result
+    // Verify address is in module bounds
+    uintptr_t base = (uintptr_t)fluffydiver_mod.base;
+    if (entry_addr < base || entry_addr >= base + fluffydiver_mod.size) {
+        fatal_error("Entry point address outside module bounds");
     }
 
-    // Now call the primary entry point
-    if (primary_entry_addr != 0 && primary_entry_name != NULL) {
-        debugPrintf("=== CALLING PRIMARY ENTRY POINT ===\n");
-        debugPrintf("Entry point: %s at 0x%08X\n", primary_entry_name, primary_entry_addr);
+    debugPrintf("Address verification passed: 0x%08X is within bounds 0x%08X-0x%08X\n",
+                entry_addr, base, base + fluffydiver_mod.size);
 
-        // Verify address is in module bounds
-        uintptr_t base = (uintptr_t)fluffydiver_mod.base;
-        if (primary_entry_addr < base || primary_entry_addr >= base + fluffydiver_mod.size) {
-            fatal_error("Entry point address outside module bounds");
-        }
+    // Magenta screen for calling entry point
+    glClearColor(1.0f, 0.0f, 1.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    vglSwapBuffers(GL_FALSE);
 
-        // Magenta screen for primary entry point
-        glClearColor(1.0f, 0.0f, 1.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-        vglSwapBuffers(GL_FALSE);
+    // Flush logs before calling
+    if (debug_log) fflush(debug_log);
+    if (debug_fd >= 0) sceIoClose(debug_fd);
 
-        // Flush logs before calling
-        if (debug_log) fflush(debug_log);
-        if (debug_fd >= 0) sceIoClose(debug_fd);
+    debugPrintf("=== DIRECT FUNCTION CALL (GTA SA VITA METHOD) ===\n");
 
-        // Call based on entry point type
-        if (strstr(primary_entry_name, "Java_com_hotdog")) {
-            debugPrintf("Calling JNI function: %s(JNIEnv*, jobject)\n", primary_entry_name);
-            void (*jni_func)(void*, void*) = (void(*)(void*, void*))primary_entry_addr;
-            jni_func(fake_env, fake_context);
+    // Try different calling conventions - start with simplest
+    debugPrintf("Attempting Method 1: Direct call with JNI signature\n");
 
-        } else if (strcmp(primary_entry_name, "android_main") == 0) {
-            debugPrintf("Calling android_main(struct android_app*)\n");
-            void (*android_main_func)(void*) = (void(*)(void*))primary_entry_addr;
-            android_main_func(fake_context);
+    void (*entry_func)(void*, void*) = (void(*)(void*, void*))entry_addr;
 
-        } else if (strcmp(primary_entry_name, "main") == 0) {
-            debugPrintf("Calling main(int, char**)\n");
-            int (*main_func)(int, char**) = (int(*)(int, char**))primary_entry_addr;
-            char *argv[] = {"fluffydiver", NULL};
-            main_func(1, argv);
-        }
+    debugPrintf("Calling entry function with JNI environment...\n");
+    debugPrintf("Entry function pointer: %p\n", entry_func);
+    debugPrintf("fake_env address: %p\n", fake_env);
+    debugPrintf("fake_context address: %p\n", fake_context);
 
-        // Reopen debug log
-        debug_fd = sceIoOpen("ux0:data/fluffydiver/debug_direct.log", SCE_O_WRONLY | SCE_O_APPEND, 0777);
-
-        debugPrintf("✓ %s returned successfully!\n", primary_entry_name);
-
-        // Cyan screen for complete success
-        glClearColor(0.0f, 1.0f, 1.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-        vglSwapBuffers(GL_FALSE);
-
-    } else {
-        fatal_error("No suitable primary entry point found");
+    // Flush debug output before critical call
+    if (debug_log) fflush(debug_log);
+    if (debug_fd >= 0) {
+        sceIoWrite(debug_fd, "ABOUT TO CALL ENTRY FUNCTION\n", 28);
+        sceIoClose(debug_fd);
     }
+
+    // Call the entry function
+    entry_func(fake_env, fake_context);
+
+    // Reopen debug log
+    debug_fd = sceIoOpen("ux0:data/fluffydiver/debug_direct.log", SCE_O_WRONLY | SCE_O_APPEND, 0777);
+
+    debugPrintf("✓ Entry function returned successfully!\n");
+
+    // Cyan screen for complete success
+    glClearColor(0.0f, 1.0f, 1.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    vglSwapBuffers(GL_FALSE);
 
     debugPrintf("=== INITIALIZATION COMPLETE ===\n");
     debugPrintf("Game should now be running...\n");
