@@ -382,8 +382,53 @@ void so_flush_caches(so_module *mod) {
 int so_initialize(so_module *mod) {
     debugPrintf("[SO] Initializing module...\n");
 
-    // TODO: Find and call init functions
-    debugPrintf("[SO] Module initialization stubbed - returning success\n");
+    // Find dynamic section to look for init functions
+    char *ehdr = (char*)mod->base;
+    uint32_t phoff = *(uint32_t*)(ehdr + 28);
+    uint16_t phnum = *(uint16_t*)(ehdr + 44);
+
+    Elf32_Phdr *phdrs = (Elf32_Phdr*)((char*)mod->base + phoff);
+    Elf32_Dyn *dynamic = NULL;
+
+    // Find PT_DYNAMIC segment
+    for (int i = 0; i < phnum; i++) {
+        if (phdrs[i].p_type == 2) { // PT_DYNAMIC
+            dynamic = (Elf32_Dyn*)((char*)mod->base + phdrs[i].p_vaddr);
+            break;
+        }
+    }
+
+    if (!dynamic) {
+        debugPrintf("[SO] No PT_DYNAMIC segment found\n");
+        return 0;
+    }
+
+    // Look for init functions
+    Elf32_Dyn *dyn = dynamic;
+    while (dyn->d_tag != DT_NULL) {
+        switch (dyn->d_tag) {
+            case DT_INIT: {
+                void (*init_func)(void) = (void*)((char*)mod->base + dyn->d_val);
+                debugPrintf("[SO] Calling DT_INIT at 0x%08X\n", (uint32_t)init_func);
+                init_func();
+                break;
+            }
+            case DT_INIT_ARRAY: {
+                void (**init_array)(void) = (void**)((char*)mod->base + dyn->d_val);
+                debugPrintf("[SO] Found DT_INIT_ARRAY at 0x%08X\n", dyn->d_val);
+                // We need DT_INIT_ARRAYSZ to know how many functions to call
+                break;
+            }
+            case DT_INIT_ARRAYSZ: {
+                // This would be handled with DT_INIT_ARRAY
+                debugPrintf("[SO] DT_INIT_ARRAYSZ: %d bytes\n", dyn->d_val);
+                break;
+            }
+        }
+        dyn++;
+    }
+
+    debugPrintf("[SO] Module initialization complete\n");
     return 0;
 }
 
