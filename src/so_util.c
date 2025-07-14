@@ -414,9 +414,11 @@ int so_initialize(so_module *mod) {
                 break;
             }
             case DT_INIT_ARRAY: {
-                void (**init_array)(void) = (void**)((char*)mod->base + dyn->d_val);
+                void **init_array_ptr = (void**)((char*)mod->base + dyn->d_val);
                 debugPrintf("[SO] Found DT_INIT_ARRAY at 0x%08X\n", dyn->d_val);
-                // We need DT_INIT_ARRAYSZ to know how many functions to call
+                // Note: Processing init_array requires DT_INIT_ARRAYSZ to know count
+                // GTA SA Vita approach: Log but don't execute here
+                (void)init_array_ptr; // Suppress unused variable warning
                 break;
             }
             case DT_INIT_ARRAYSZ: {
@@ -472,8 +474,6 @@ int ret0() {
     return 0;
 }
 
-// Add these functions to your existing so_util.c file, after the existing ret0() function
-
 int ret1() {
     return 1;
 }
@@ -484,4 +484,112 @@ int retminus1() {
 
 void *retNULL() {
     return NULL;
+}
+
+// Comprehensive symbol analysis and execution function
+int so_analyze_and_try_symbols(so_module *mod, void *fake_env, void *fake_context) {
+    debugPrintf("=== COMPREHENSIVE SYMBOL ANALYSIS ===\n");
+
+    if (!mod->hash || !mod->dynstr || !mod->dynsym) {
+        debugPrintf("ERROR: Symbol table not properly loaded\n");
+        return -1;
+    }
+
+    uint32_t *hash = (uint32_t*)mod->hash;
+    uint32_t nchain = hash[1];
+    Elf32_Sym *syms = (Elf32_Sym*)mod->dynsym;
+
+    debugPrintf("Total symbols in library: %d\n", nchain);
+
+    // Look for any symbols that might be entry points
+    int java_symbols = 0;
+    int native_symbols = 0;
+    int jni_symbols = 0;
+    int valid_code_symbols = 0;
+
+    for (uint32_t i = 0; i < nchain && i < 100; i++) { // Limit to first 100 symbols
+        const char *name = (char*)mod->dynstr + syms[i].st_name;
+        if (name && strlen(name) > 0) {
+            debugPrintf("Symbol %d: %s (value: 0x%08X)\n", i, name, syms[i].st_value);
+
+            if (strstr(name, "Java_")) java_symbols++;
+            if (strstr(name, "native")) native_symbols++;
+            if (strstr(name, "JNI")) jni_symbols++;
+
+            // Check if this symbol points to executable code
+            if (syms[i].st_value != 0) {
+                uintptr_t sym_addr = (uintptr_t)mod->base + syms[i].st_value;
+
+                // Ensure address is within module bounds
+                if (sym_addr >= (uintptr_t)mod->base &&
+                    sym_addr < (uintptr_t)mod->base + mod->size) {
+
+                    uint32_t *code_ptr = (uint32_t*)sym_addr;
+                uint32_t first_inst = code_ptr[0];
+
+                // Check for ARM patterns
+                if ((first_inst & 0xffff0000) == 0xe92d0000) {
+                    debugPrintf("  ✓ %s has ARM prologue - trying as entry point!\n", name);
+                    valid_code_symbols++;
+
+                    // Try this as an entry point
+                    debugPrintf("  Attempting to call %s as entry point...\n", name);
+                    typedef void (*potential_entry_t)(void* env, void* thiz);
+                    potential_entry_t potential_func = (potential_entry_t)sym_addr;
+
+                    debugPrintf("  Calling %s...\n", name);
+                    potential_func(fake_env, fake_context);
+                    debugPrintf("  ✓ %s succeeded!\n", name);
+                    return 0; // Success!
+
+                } else {
+                    // Check for Thumb patterns
+                    uint16_t *thumb_ptr = (uint16_t*)sym_addr;
+                    uint16_t thumb_inst = thumb_ptr[0];
+
+                    if ((thumb_inst & 0xFF00) == 0xB500) {
+                        debugPrintf("  ✓ %s has Thumb prologue - trying as entry point!\n", name);
+                        valid_code_symbols++;
+
+                        // Try as Thumb (set LSB)
+                        typedef void (*thumb_entry_t)(void* env, void* thiz);
+                        thumb_entry_t thumb_func = (thumb_entry_t)(sym_addr | 1);
+
+                        debugPrintf("  Calling %s in Thumb mode...\n", name);
+                        thumb_func(fake_env, fake_context);
+                        debugPrintf("  ✓ %s (Thumb) succeeded!\n", name);
+                        return 0; // Success!
+                    }
+                }
+                    } else {
+                        debugPrintf("  WARNING: %s address 0x%08X is outside module bounds\n", name, sym_addr);
+                    }
+            }
+        }
+    }
+
+    debugPrintf("Symbol analysis complete:\n");
+    debugPrintf("- Java symbols: %d\n", java_symbols);
+    debugPrintf("- Native symbols: %d\n", native_symbols);
+    debugPrintf("- JNI symbols: %d\n", jni_symbols);
+    debugPrintf("- Valid code symbols: %d\n", valid_code_symbols);
+
+    if (java_symbols == 0 && jni_symbols == 0) {
+        debugPrintf("WARNING: No Java/JNI symbols found - this may not be an Android native library!\n");
+    }
+
+    if (valid_code_symbols == 0) {
+        debugPrintf("ERROR: No symbols with valid ARM/Thumb code found!\n");
+    }
+
+    debugPrintf("=== FINAL DIAGNOSIS ===\n");
+    debugPrintf("This appears to be an incompatible or corrupted library.\n");
+    debugPrintf("Possible issues:\n");
+    debugPrintf("1. Wrong architecture (x86/x64 instead of ARM)\n");
+    debugPrintf("2. Hardcoded addresses that don't work with so-loader\n");
+    debugPrintf("3. Missing dependencies or initialization requirements\n");
+    debugPrintf("4. Library requires specific Android framework components\n");
+    debugPrintf("5. File corruption during extraction\n");
+
+    return -1; // Failed to find working entry point
 }

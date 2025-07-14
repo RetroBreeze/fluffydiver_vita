@@ -91,6 +91,9 @@ void patch_game(void) {
     debugPrintf("Game patching complete\n");
 }
 
+// Forward declaration of comprehensive analysis function (in so_util.c)
+extern int so_analyze_and_try_symbols(so_module *mod, void *fake_env, void *fake_context);
+
 int main(int argc, char *argv[]) {
     // Create debug directory and open log FIRST
     sceIoMkdir("ux0:data/", 0777);
@@ -195,7 +198,26 @@ int main(int argc, char *argv[]) {
 
     debugPrintf("=== GTA SA VITA ENTRY POINT PATTERN ===\n");
 
-    // GTA SA Vita approach: Direct symbol lookup and calling
+    // FIRST: Try JNI_OnLoad - many Android games require this for initialization
+    uintptr_t jni_onload_addr = so_symbol(&fluffydiver_mod, "JNI_OnLoad");
+    if (jni_onload_addr != 0) {
+        debugPrintf("Found JNI_OnLoad at 0x%08X - calling first for initialization\n", jni_onload_addr);
+
+        // JNI_OnLoad signature: jint JNI_OnLoad(JavaVM* vm, void* reserved)
+        typedef int (*jni_onload_t)(void* vm, void* reserved);
+        jni_onload_t onload_func = (jni_onload_t)jni_onload_addr;
+
+        // Create fake JavaVM
+        static void *fake_vm = (void*)0x99999999;
+
+        debugPrintf("Calling JNI_OnLoad...\n");
+        int onload_result = onload_func(&fake_vm, NULL);
+        debugPrintf("JNI_OnLoad returned: 0x%08X\n", onload_result);
+    } else {
+        debugPrintf("No JNI_OnLoad found - skipping\n");
+    }
+
+    // SECOND: Try main entry point
     uintptr_t entry_addr = so_symbol(&fluffydiver_mod, "Java_com_hotdog_jni_Natives_onHotDogCreate");
 
     if (entry_addr == 0) {
@@ -203,9 +225,9 @@ int main(int argc, char *argv[]) {
 
         // Try other common entry points
         const char* alternatives[] = {
-            "JNI_OnLoad",
             "Java_com_hotdog_jni_Natives_init",
             "Java_com_hotdog_jni_Natives_nativeInit",
+            "Java_com_hotdog_jni_Natives_onCreate",
             "android_main",
             "main",
             NULL
@@ -221,7 +243,78 @@ int main(int argc, char *argv[]) {
     }
 
     if (entry_addr == 0) {
-        fatal_error("No entry point found");
+        debugPrintf("No standard entry points found - trying comprehensive analysis\n");
+
+        // Call comprehensive symbol analysis function
+        int analysis_result = so_analyze_and_try_symbols(&fluffydiver_mod, fake_env, fake_context);
+        if (analysis_result == 0) {
+            debugPrintf("✓ Found working entry point via comprehensive analysis!\n");
+
+            // If we get here, the game is running
+            // Cyan screen for complete success
+            glClearColor(0.0f, 1.0f, 1.0f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+            vglSwapBuffers(GL_FALSE);
+
+            debugPrintf("=== INITIALIZATION COMPLETE ===\n");
+            debugPrintf("Game should now be running...\n");
+
+            // Main loop - keep the game alive
+            debugPrintf("Entering main loop...\n");
+            while (1) {
+                // Process input, render, etc.
+                sceKernelDelayThread(16666); // ~60 FPS
+            }
+        } else {
+            fatal_error("Comprehensive analysis failed to find working entry point");
+        }
+    }
+
+    // CRITICAL: Even if we found the standard entry point, it might not work
+    // Let's validate it first before trying
+    debugPrintf("=== VALIDATING STANDARD ENTRY POINT ===\n");
+
+    // Check if the found entry point has valid code
+    uint32_t *code_ptr = (uint32_t*)entry_addr;
+    uint32_t first_inst = code_ptr[0];
+    uint16_t *thumb_ptr = (uint16_t*)entry_addr;
+    uint16_t thumb_inst = thumb_ptr[0];
+
+    debugPrintf("Entry point code analysis:\n");
+    debugPrintf("ARM instruction: 0x%08X\n", first_inst);
+    debugPrintf("Thumb instruction: 0x%04X\n", thumb_inst);
+
+    // Check for valid ARM or Thumb patterns
+    int has_valid_arm = (first_inst & 0xffff0000) == 0xe92d0000;
+    int has_valid_thumb = (thumb_inst & 0xFF00) == 0xB500;
+
+    if (!has_valid_arm && !has_valid_thumb) {
+        debugPrintf("WARNING: Standard entry point has invalid code patterns!\n");
+        debugPrintf("Falling back to comprehensive analysis...\n");
+
+        // Call comprehensive symbol analysis function
+        int analysis_result = so_analyze_and_try_symbols(&fluffydiver_mod, fake_env, fake_context);
+        if (analysis_result == 0) {
+            debugPrintf("✓ Found working entry point via comprehensive analysis!\n");
+
+            // If we get here, the game is running
+            // Cyan screen for complete success
+            glClearColor(0.0f, 1.0f, 1.0f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+            vglSwapBuffers(GL_FALSE);
+
+            debugPrintf("=== INITIALIZATION COMPLETE ===\n");
+            debugPrintf("Game should now be running...\n");
+
+            // Main loop - keep the game alive
+            debugPrintf("Entering main loop...\n");
+            while (1) {
+                // Process input, render, etc.
+                sceKernelDelayThread(16666); // ~60 FPS
+            }
+        } else {
+            fatal_error("Both standard and comprehensive analysis failed");
+        }
     }
 
     debugPrintf("=== CALLING ENTRY POINT ===\n");
@@ -247,31 +340,18 @@ int main(int argc, char *argv[]) {
 
     debugPrintf("=== DIRECT FUNCTION CALL (GTA SA VITA METHOD) ===\n");
 
-    // Try different calling conventions - start with simplest
-    debugPrintf("Attempting Method 1: Direct call with JNI signature\n");
+    // Try calling with the most basic approach first
+    debugPrintf("Attempting standard JNI function call...\n");
 
-    void (*entry_func)(void*, void*) = (void(*)(void*, void*))entry_addr;
+    // Standard JNI call
+    typedef void (*jni_func_t)(void* env, void* thiz);
+    jni_func_t jni_call = (jni_func_t)entry_addr;
 
-    debugPrintf("Calling entry function with JNI environment...\n");
-    debugPrintf("Entry function pointer: %p\n", entry_func);
-    debugPrintf("fake_env address: %p\n", fake_env);
-    debugPrintf("fake_context address: %p\n", fake_context);
+    debugPrintf("About to call with JNI parameters...\n");
+    jni_call(fake_env, fake_context);
+    debugPrintf("✓ JNI call succeeded!\n");
 
-    // Flush debug output before critical call
-    if (debug_log) fflush(debug_log);
-    if (debug_fd >= 0) {
-        sceIoWrite(debug_fd, "ABOUT TO CALL ENTRY FUNCTION\n", 28);
-        sceIoClose(debug_fd);
-    }
-
-    // Call the entry function
-    entry_func(fake_env, fake_context);
-
-    // Reopen debug log
-    debug_fd = sceIoOpen("ux0:data/fluffydiver/debug_direct.log", SCE_O_WRONLY | SCE_O_APPEND, 0777);
-
-    debugPrintf("✓ Entry function returned successfully!\n");
-
+    // If we get here, the function succeeded
     // Cyan screen for complete success
     glClearColor(0.0f, 1.0f, 1.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
