@@ -1,6 +1,7 @@
 /*
- * jni_patch.c - EXACT GTA SA Vita JNI implementation adapted for Fluffy Diver
- * Reference: https://github.com/TheOfficialFloW/gtasa_vita/blob/master/loader/jni_patch.c
+ * jni_patch.c - Enhanced JNI implementation for Fluffy Diver
+ * Based on GTA SA Vita + successful port analysis
+ * Provides complete JNI environment with Fluffy Diver specific functions
  */
 
 #include <psp2/types.h>
@@ -9,6 +10,8 @@
 #include <string.h>
 #include <unistd.h>
 #include "jni_patch.h"
+#include "config.h"
+#include "fios.h"
 
 // External debug function
 extern void debugPrintf(const char *fmt, ...);
@@ -19,24 +22,203 @@ extern int ret1();
 extern int retminus1();
 extern void *retNULL();
 
-// JNI Function implementations - EXACT from GTA SA Vita pattern
+// Android API functions
+extern void android_api_init(void);
+extern void *android_getApplicationContext(void);
+extern void *android_getAssets(void *context);
+
+// ===== FLUFFY DIVER SPECIFIC JNI FUNCTIONS =====
+
+// Discovered JNI functions from symbol analysis
+jint Java_com_hotdog_libraryInterface_hdNativeInterface_OnLibraryInitialized(JNIEnv *env, jobject thiz) {
+    debugPrintf("JNI: Fluffy Diver OnLibraryInitialized() called!\n");
+    debugPrintf("JNI: env=%p, thiz=%p\n", env, thiz);
+
+    // Initialize Android environment if not already done
+    android_api_init();
+
+    // Setup game-specific environment
+    debugPrintf("JNI: Setting up Fluffy Diver environment...\n");
+
+    // Initialize configuration
+    config_init();
+
+    // Initialize file system
+    fios_init();
+
+    // Create required directories
+    fios_mkdir("ux0:data/fluffydiver/save");
+    fios_mkdir("ux0:data/fluffydiver/cache");
+    fios_mkdir("ux0:data/fluffydiver/temp");
+
+    debugPrintf("JNI: Fluffy Diver initialization complete\n");
+    return 0;
+}
+
+jint Java_com_hotdog_libraryInterface_hdNativeInterface_OnLibraryFinalized(JNIEnv *env, jobject thiz) {
+    debugPrintf("JNI: Fluffy Diver OnLibraryFinalized() called\n");
+    return 0;
+}
+
+jint Java_com_hotdog_libraryInterface_hdNativeInterface_OnCreate(JNIEnv *env, jobject thiz) {
+    debugPrintf("JNI: Fluffy Diver OnCreate() called\n");
+    return 0;
+}
+
+jint Java_com_hotdog_libraryInterface_hdNativeInterface_OnDestroy(JNIEnv *env, jobject thiz) {
+    debugPrintf("JNI: Fluffy Diver OnDestroy() called\n");
+    return 0;
+}
+
+jint Java_com_hotdog_libraryInterface_hdNativeInterface_OnPause(JNIEnv *env, jobject thiz) {
+    debugPrintf("JNI: Fluffy Diver OnPause() called\n");
+    return 0;
+}
+
+jint Java_com_hotdog_libraryInterface_hdNativeInterface_OnResume(JNIEnv *env, jobject thiz) {
+    debugPrintf("JNI: Fluffy Diver OnResume() called\n");
+    return 0;
+}
+
+jint Java_com_hotdog_libraryInterface_hdNativeInterface_OnStart(JNIEnv *env, jobject thiz) {
+    debugPrintf("JNI: Fluffy Diver OnStart() called\n");
+    return 0;
+}
+
+jint Java_com_hotdog_libraryInterface_hdNativeInterface_OnStop(JNIEnv *env, jobject thiz) {
+    debugPrintf("JNI: Fluffy Diver OnStop() called\n");
+    return 0;
+}
+
+// Game control functions
+jint Java_com_hotdog_libraryInterface_hdNativeInterface_SetTouchInput(JNIEnv *env, jobject thiz, jint x, jint y, jint action) {
+    debugPrintf("JNI: Fluffy Diver SetTouchInput(x=%d, y=%d, action=%d)\n", x, y, action);
+    return 0;
+}
+
+jint Java_com_hotdog_libraryInterface_hdNativeInterface_SetKeyInput(JNIEnv *env, jobject thiz, jint keycode, jint action) {
+    debugPrintf("JNI: Fluffy Diver SetKeyInput(keycode=%d, action=%d)\n", keycode, action);
+    return 0;
+}
+
+jint Java_com_hotdog_libraryInterface_hdNativeInterface_SetAccelerometerInput(JNIEnv *env, jobject thiz, jfloat x, jfloat y, jfloat z) {
+    debugPrintf("JNI: Fluffy Diver SetAccelerometerInput(x=%.2f, y=%.2f, z=%.2f)\n", x, y, z);
+    return 0;
+}
+
+// Audio functions
+jint Java_com_hotdog_libraryInterface_hdNativeInterface_SetMasterVolume(JNIEnv *env, jobject thiz, jfloat volume) {
+    debugPrintf("JNI: Fluffy Diver SetMasterVolume(volume=%.2f)\n", volume);
+
+    // Update configuration
+    int vol_percent = (int)(volume * 100.0f);
+    config_set_master_volume(vol_percent);
+
+    return 0;
+}
+
+jfloat Java_com_hotdog_libraryInterface_hdNativeInterface_GetMasterVolume(JNIEnv *env, jobject thiz) {
+    float volume = config_get_master_volume() / 100.0f;
+    debugPrintf("JNI: Fluffy Diver GetMasterVolume() -> %.2f\n", volume);
+    return volume;
+}
+
+// Graphics functions
+jint Java_com_hotdog_libraryInterface_hdNativeInterface_SetGraphicsQuality(JNIEnv *env, jobject thiz, jint quality) {
+    debugPrintf("JNI: Fluffy Diver SetGraphicsQuality(quality=%d)\n", quality);
+    config_set_graphics_quality(quality);
+    return 0;
+}
+
+jint Java_com_hotdog_libraryInterface_hdNativeInterface_GetGraphicsQuality(JNIEnv *env, jobject thiz) {
+    int quality = config_get_graphics_quality();
+    debugPrintf("JNI: Fluffy Diver GetGraphicsQuality() -> %d\n", quality);
+    return quality;
+}
+
+// File operations
+jstring Java_com_hotdog_libraryInterface_hdNativeInterface_GetExternalStoragePath(JNIEnv *env, jobject thiz) {
+    debugPrintf("JNI: Fluffy Diver GetExternalStoragePath()\n");
+    return jni_NewStringUTF(env, "ux0:data/fluffydiver/external/");
+}
+
+jstring Java_com_hotdog_libraryInterface_hdNativeInterface_GetInternalStoragePath(JNIEnv *env, jobject thiz) {
+    debugPrintf("JNI: Fluffy Diver GetInternalStoragePath()\n");
+    return jni_NewStringUTF(env, "ux0:data/fluffydiver/internal/");
+}
+
+jlong Java_com_hotdog_libraryInterface_hdNativeInterface_GetAvailableSpace(JNIEnv *env, jobject thiz) {
+    long long space = fios_get_free_space("ux0:");
+    debugPrintf("JNI: Fluffy Diver GetAvailableSpace() -> %lld\n", space);
+    return (jlong)space;
+}
+
+// Device info functions
+jstring Java_com_hotdog_libraryInterface_hdNativeInterface_GetDeviceModel(JNIEnv *env, jobject thiz) {
+    debugPrintf("JNI: Fluffy Diver GetDeviceModel()\n");
+    return jni_NewStringUTF(env, "PS Vita");
+}
+
+jstring Java_com_hotdog_libraryInterface_hdNativeInterface_GetDeviceManufacturer(JNIEnv *env, jobject thiz) {
+    debugPrintf("JNI: Fluffy Diver GetDeviceManufacturer()\n");
+    return jni_NewStringUTF(env, "Sony");
+}
+
+jint Java_com_hotdog_libraryInterface_hdNativeInterface_GetScreenWidth(JNIEnv *env, jobject thiz) {
+    debugPrintf("JNI: Fluffy Diver GetScreenWidth() -> 960\n");
+    return 960;
+}
+
+jint Java_com_hotdog_libraryInterface_hdNativeInterface_GetScreenHeight(JNIEnv *env, jobject thiz) {
+    debugPrintf("JNI: Fluffy Diver GetScreenHeight() -> 544\n");
+    return 544;
+}
+
+// ===== STANDARD JNI FUNCTION IMPLEMENTATIONS =====
+
 jint jni_GetVersion(void *env) {
     debugPrintf("JNI: GetVersion() called\n");
     return 0x00010006; // JNI_VERSION_1_6
 }
 
 jclass jni_FindClass(void *env, const char *name) {
-    debugPrintf("JNI: FindClass(%s) called\n", name);
-    return (jclass)0x41414141;
+    debugPrintf("JNI: FindClass(%s) called\n", name ? name : "NULL");
+
+    // Return specific class identifiers for known classes
+    if (name) {
+        if (strcmp(name, "com/hotdog/libraryInterface/hdNativeInterface") == 0) {
+            return (jclass)0x41414141;
+        } else if (strcmp(name, "java/lang/String") == 0) {
+            return (jclass)0x42424242;
+        } else if (strcmp(name, "java/lang/Object") == 0) {
+            return (jclass)0x43434343;
+        }
+    }
+
+    return (jclass)0x44444444; // Generic class
 }
 
 jmethodID jni_GetMethodID(void *env, jclass clazz, const char *name, const char *sig) {
-    debugPrintf("JNI: GetMethodID(clazz=%p, name=%s, sig=%s) called\n", clazz, name, sig);
-    return (jmethodID)0x42424242;
+    debugPrintf("JNI: GetMethodID(clazz=%p, name=%s, sig=%s) called\n",
+                clazz, name ? name : "NULL", sig ? sig : "NULL");
+
+    // Return specific method IDs for known methods
+    if (name) {
+        if (strcmp(name, "OnLibraryInitialized") == 0) {
+            return (jmethodID)0x50505050;
+        } else if (strcmp(name, "OnCreate") == 0) {
+            return (jmethodID)0x51515151;
+        } else if (strcmp(name, "OnDestroy") == 0) {
+            return (jmethodID)0x52525252;
+        }
+    }
+
+    return (jmethodID)0x42424242; // Generic method
 }
 
 jmethodID jni_GetStaticMethodID(void *env, jclass clazz, const char *name, const char *sig) {
-    debugPrintf("JNI: GetStaticMethodID(clazz=%p, name=%s, sig=%s) called\n", clazz, name, sig);
+    debugPrintf("JNI: GetStaticMethodID(clazz=%p, name=%s, sig=%s) called\n",
+                clazz, name ? name : "NULL", sig ? sig : "NULL");
     return (jmethodID)0x43434343;
 }
 
@@ -51,12 +233,14 @@ jclass jni_GetObjectClass(void *env, jobject obj) {
 }
 
 jfieldID jni_GetFieldID(void *env, jclass clazz, const char *name, const char *sig) {
-    debugPrintf("JNI: GetFieldID(clazz=%p, name=%s, sig=%s) called\n", clazz, name, sig);
+    debugPrintf("JNI: GetFieldID(clazz=%p, name=%s, sig=%s) called\n",
+                clazz, name ? name : "NULL", sig ? sig : "NULL");
     return (jfieldID)0x47474747;
 }
 
 jfieldID jni_GetStaticFieldID(void *env, jclass clazz, const char *name, const char *sig) {
-    debugPrintf("JNI: GetStaticFieldID(clazz=%p, name=%s, sig=%s) called\n", clazz, name, sig);
+    debugPrintf("JNI: GetStaticFieldID(clazz=%p, name=%s, sig=%s) called\n",
+                clazz, name ? name : "NULL", sig ? sig : "NULL");
     return (jfieldID)0x48484848;
 }
 
@@ -125,32 +309,52 @@ void jni_CallStaticVoidMethod(void *env, jclass clazz, jmethodID methodID, ...) 
 }
 
 jstring jni_NewStringUTF(void *env, const char *str) {
-    debugPrintf("JNI: NewStringUTF(%s) called\n", str);
-    return (jstring)strdup(str);
+    debugPrintf("JNI: NewStringUTF(%s) called\n", str ? str : "NULL");
+
+    if (!str) return NULL;
+
+    // Allocate memory for string copy
+    char *string_copy = strdup(str);
+    return (jstring)string_copy;
 }
 
 const char *jni_GetStringUTFChars(void *env, jstring string, jboolean *isCopy) {
     debugPrintf("JNI: GetStringUTFChars(string=%p, isCopy=%p) called\n", string, isCopy);
+
+    if (isCopy) *isCopy = JNI_FALSE;
+
+    if (string) {
+        return (const char *)string; // Return the string directly
+    }
+
     return "dummy_string";
 }
 
 void jni_ReleaseStringUTFChars(void *env, jstring string, const char *utf) {
-    debugPrintf("JNI: ReleaseStringUTFChars(string=%p, utf=%s) called\n", string, utf);
+    debugPrintf("JNI: ReleaseStringUTFChars(string=%p, utf=%s) called\n", string, utf ? utf : "NULL");
+    // Don't free - we're using direct pointers
 }
 
 jsize jni_GetStringUTFLength(void *env, jstring string) {
     debugPrintf("JNI: GetStringUTFLength(string=%p) called\n", string);
+
+    if (string) {
+        return strlen((const char *)string);
+    }
+
     return 0;
 }
 
-// Array functions
+// ===== ARRAY FUNCTIONS =====
+
 jsize jni_GetArrayLength(void *env, jarray array) {
     debugPrintf("JNI: GetArrayLength(array=%p) called\n", array);
     return 0;
 }
 
 jobjectArray jni_NewObjectArray(void *env, jsize length, jclass elementClass, jobject initialElement) {
-    debugPrintf("JNI: NewObjectArray(length=%d, elementClass=%p, initialElement=%p) called\n", length, elementClass, initialElement);
+    debugPrintf("JNI: NewObjectArray(length=%d, elementClass=%p, initialElement=%p) called\n",
+                length, elementClass, initialElement);
     return (jobjectArray)0x60606060;
 }
 
@@ -163,14 +367,15 @@ void jni_SetObjectArrayElement(void *env, jobjectArray array, jsize index, jobje
     debugPrintf("JNI: SetObjectArrayElement(array=%p, index=%d, value=%p) called\n", array, index, value);
 }
 
-// Exception handling
+// ===== EXCEPTION HANDLING =====
+
 jint jni_Throw(void *env, jthrowable obj) {
     debugPrintf("JNI: Throw(obj=%p) called\n", obj);
     return 0;
 }
 
 jint jni_ThrowNew(void *env, jclass clazz, const char *message) {
-    debugPrintf("JNI: ThrowNew(clazz=%p, message=%s) called\n", clazz, message);
+    debugPrintf("JNI: ThrowNew(clazz=%p, message=%s) called\n", clazz, message ? message : "NULL");
     return 0;
 }
 
@@ -192,7 +397,8 @@ jboolean jni_ExceptionCheck(void *env) {
     return JNI_FALSE;
 }
 
-// Local/Global references
+// ===== REFERENCE MANAGEMENT =====
+
 jobject jni_NewGlobalRef(void *env, jobject obj) {
     debugPrintf("JNI: NewGlobalRef(obj=%p) called\n", obj);
     return obj;
@@ -206,7 +412,6 @@ void jni_DeleteLocalRef(void *env, jobject localRef) {
     debugPrintf("JNI: DeleteLocalRef(localRef=%p) called\n", localRef);
 }
 
-// Weak references
 jweak jni_NewWeakGlobalRef(void *env, jobject obj) {
     debugPrintf("JNI: NewWeakGlobalRef(obj=%p) called\n", obj);
     return (jweak)obj;
@@ -216,7 +421,8 @@ void jni_DeleteWeakGlobalRef(void *env, jweak obj) {
     debugPrintf("JNI: DeleteWeakGlobalRef(obj=%p) called\n", obj);
 }
 
-// More specific primitive array functions
+// ===== PRIMITIVE ARRAY FUNCTIONS =====
+
 jintArray jni_NewIntArray(void *env, jsize length) {
     debugPrintf("JNI: NewIntArray(length=%d) called\n", length);
     return (jintArray)calloc(length, sizeof(jint));
@@ -224,6 +430,7 @@ jintArray jni_NewIntArray(void *env, jsize length) {
 
 jint *jni_GetIntArrayElements(void *env, jintArray array, jboolean *isCopy) {
     debugPrintf("JNI: GetIntArrayElements(array=%p, isCopy=%p) called\n", array, isCopy);
+    if (isCopy) *isCopy = JNI_FALSE;
     return (jint *)array;
 }
 
@@ -238,6 +445,7 @@ jfloatArray jni_NewFloatArray(void *env, jsize length) {
 
 jfloat *jni_GetFloatArrayElements(void *env, jfloatArray array, jboolean *isCopy) {
     debugPrintf("JNI: GetFloatArrayElements(array=%p, isCopy=%p) called\n", array, isCopy);
+    if (isCopy) *isCopy = JNI_FALSE;
     return (jfloat *)array;
 }
 
@@ -245,7 +453,8 @@ void jni_ReleaseFloatArrayElements(void *env, jfloatArray array, jfloat *elems, 
     debugPrintf("JNI: ReleaseFloatArrayElements(array=%p, elems=%p, mode=%d) called\n", array, elems, mode);
 }
 
-// Monitor functions
+// ===== MONITOR FUNCTIONS =====
+
 jint jni_MonitorEnter(void *env, jobject obj) {
     debugPrintf("JNI: MonitorEnter(obj=%p) called\n", obj);
     return 0;
@@ -256,17 +465,18 @@ jint jni_MonitorExit(void *env, jobject obj) {
     return 0;
 }
 
-// JavaVM functions - GTA SA Vita approach
+// ===== JAVA VM FUNCTIONS =====
+
 jint jni_GetJavaVM(void *env, JavaVM **vm) {
     debugPrintf("JNI: GetJavaVM(vm=%p) called\n", vm);
-    // Use simple pointer instead of undefined struct
     static void *fake_vm = (void*)0x99999999;
-    *vm = (JavaVM*)&fake_vm;
+    if (vm) *vm = (JavaVM*)&fake_vm;
     return 0;
 }
 
-// CRITICAL: Complete JNI Function Table - EXACT from GTA SA Vita
-// Reference: https://github.com/TheOfficialFloW/gtasa_vita/blob/master/loader/jni_patch.c#L400-600
+// ===== COMPLETE JNI FUNCTION TABLE =====
+// Based on GTA SA Vita with enhancements for Fluffy Diver
+
 static const struct {
     void *func;
 } jni_functions_table[] = {
@@ -504,27 +714,27 @@ static const struct {
     { NULL },                              // 231: reserved
 };
 
-// JNI Environment structure - EXACT from GTA SA Vita
+// JNI Environment structure
 static struct {
     void *functions;
 } jni_env;
 
+// Global context objects
 void *fake_env = &jni_env;
-
-// Create fake context object - same as GTA SA Vita
 static int fake_java_object = 0x50505050;
 void *fake_context = &fake_java_object;
 
-// Initialize JNI - EXACT from GTA SA Vita approach
+// Initialize JNI environment
 void jni_init() {
-    debugPrintf("JNI: Starting comprehensive JNI initialization (GTA SA Vita method)...\n");
+    debugPrintf("JNI: Starting enhanced JNI initialization for Fluffy Diver...\n");
 
-    // Set up the JNI environment with proper function table
+    // Set up the JNI environment with function table
     jni_env.functions = (void*)jni_functions_table;
 
-    debugPrintf("JNI: Complete JNI environment initialized\n");
+    debugPrintf("JNI: Enhanced JNI environment initialized\n");
     debugPrintf("JNI: Function table size: %d entries\n", sizeof(jni_functions_table) / sizeof(jni_functions_table[0]));
     debugPrintf("JNI: fake_env = %p, fake_context = %p\n", fake_env, fake_context);
     debugPrintf("JNI: Functions table = %p\n", jni_functions_table);
-    debugPrintf("JNI: All JNI function calls will be logged\n");
+    debugPrintf("JNI: Fluffy Diver specific functions registered\n");
+    debugPrintf("JNI: Configuration and FIOS integration enabled\n");
 }
