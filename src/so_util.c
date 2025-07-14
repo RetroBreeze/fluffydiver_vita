@@ -486,14 +486,6 @@ void *retNULL() {
     return NULL;
 }
 
-// Enhanced symbol analysis with hang detection - moved from main.c
-int so_analyze_and_try_symbols_with_hang_detection(so_module *mod, void *fake_env, void *fake_context,
-                                                   volatile int *function_returned_ptr,
-                                                   int (*hang_detection_func)(SceSize, void*));
-
-// NEW: Real entry point finder (replaces random C++ function calling)
-int so_find_real_entry_points(so_module *mod, void *fake_env, void *fake_context);
-
 // BACK TO YOUR ORIGINAL WORKING APPROACH - Simple and effective
 int so_analyze_and_try_symbols(so_module *mod, void *fake_env, void *fake_context) {
     debugPrintf("=== COMPREHENSIVE SYMBOL ANALYSIS ===\n");
@@ -746,8 +738,6 @@ int so_analyze_and_try_symbols_with_hang_detection(so_module *mod, void *fake_en
 
                                                                // Check against android entry patterns
                                                                for (int p = 0; android_entry_patterns[p] != NULL; p++) {
-                                                                   const char *pattern = android_entry_patterns[p];
-
                                                                    // Simple pattern matching
                                                                    if (strstr(name, "Java_com_") ||
                                                                        strstr(name, "android_main") ||

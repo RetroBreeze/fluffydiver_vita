@@ -28,6 +28,7 @@
 #include "config.h"
 #include "dialog.h"
 #include "fios.h"
+#include "android_patch.h"
 
 // GTA SA Vita exact memory configuration
 int sceLibcHeapSize = 240 * 1024 * 1024;
@@ -175,12 +176,12 @@ int call_game_entry_point(void) {
         if (entry_addr) {
             debugPrintf("Found JNI_OnLoad at 0x%08X\n", entry_addr);
 
-            // Call JNI_OnLoad first
-            typedef jint (*JNI_OnLoad_t)(void* vm, void* reserved);
+            // Call JNI_OnLoad first - use int instead of jint for typedef
+            typedef int (*JNI_OnLoad_t)(void* vm, void* reserved);
             JNI_OnLoad_t jni_onload = (JNI_OnLoad_t)entry_addr;
 
             debugPrintf("Calling JNI_OnLoad...\n");
-            jint result = jni_onload(fake_env, NULL);
+            int result = jni_onload(fake_env, NULL);
             debugPrintf("JNI_OnLoad returned: %d\n", result);
 
             // Try primary entry point again

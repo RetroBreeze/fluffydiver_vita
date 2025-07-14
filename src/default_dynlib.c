@@ -147,24 +147,33 @@ int open_hook(const char *pathname, int flags, mode_t mode) {
     return fd;
 }
 
-// Enhanced pthread stubs with proper error handling
+// Enhanced pthread stubs with proper error handling (GTA SA Vita approach)
 int pthread_mutex_init_fake(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) {
     debugPrintf("pthread: mutex_init(%p, %p)\n", mutex, attr);
     if (!mutex) return EINVAL;
 
-    *mutex = malloc(sizeof(SceKernelLwMutexWork));
-    if (!*mutex) return ENOMEM;
+    // Allocate SceKernelLwMutexWork structure
+    SceKernelLwMutexWork *work = malloc(sizeof(SceKernelLwMutexWork));
+    if (!work) return ENOMEM;
 
-    int ret = sceKernelCreateLwMutex(*mutex, "mutex", 0, 0, NULL);
-    return (ret < 0) ? EINVAL : 0;
+    int ret = sceKernelCreateLwMutex(work, "mutex", 0, 0, NULL);
+    if (ret < 0) {
+        free(work);
+        return EINVAL;
+    }
+
+    // Store the work pointer in the mutex
+    *mutex = (pthread_mutex_t)work;
+    return 0;
 }
 
 int pthread_mutex_destroy_fake(pthread_mutex_t *mutex) {
     debugPrintf("pthread: mutex_destroy(%p)\n", mutex);
     if (!mutex || !*mutex) return EINVAL;
 
-    int ret = sceKernelDeleteLwMutex(*mutex);
-    free(*mutex);
+    SceKernelLwMutexWork *work = (SceKernelLwMutexWork *)*mutex;
+    int ret = sceKernelDeleteLwMutex(work);
+    free(work);
     *mutex = NULL;
     return (ret < 0) ? EINVAL : 0;
 }
@@ -173,7 +182,8 @@ int pthread_mutex_lock_fake(pthread_mutex_t *mutex) {
     debugPrintf("pthread: mutex_lock(%p)\n", mutex);
     if (!mutex || !*mutex) return EINVAL;
 
-    int ret = sceKernelLockLwMutex(*mutex, 1, NULL);
+    SceKernelLwMutexWork *work = (SceKernelLwMutexWork *)*mutex;
+    int ret = sceKernelLockLwMutex(work, 1, NULL);
     return (ret < 0) ? EINVAL : 0;
 }
 
@@ -181,7 +191,8 @@ int pthread_mutex_unlock_fake(pthread_mutex_t *mutex) {
     debugPrintf("pthread: mutex_unlock(%p)\n", mutex);
     if (!mutex || !*mutex) return EINVAL;
 
-    int ret = sceKernelUnlockLwMutex(*mutex, 1);
+    SceKernelLwMutexWork *work = (SceKernelLwMutexWork *)*mutex;
+    int ret = sceKernelUnlockLwMutex(work, 1);
     return (ret < 0) ? EINVAL : 0;
 }
 
