@@ -1,6 +1,6 @@
 /*
- * main.c - Based on GTA SA Vita entry point methodology
- * Simplified to follow exact GTA SA Vita pattern
+ * main.c - Restored GTA SA Vita simple methodology with hang detection
+ * Based on your original working approach
  */
 
 #include <psp2/io/dirent.h>
@@ -8,6 +8,7 @@
 #include <psp2/io/stat.h>
 #include <psp2/kernel/clib.h>
 #include <psp2/kernel/processmgr.h>
+#include <psp2/kernel/threadmgr.h>
 #include <psp2/ctrl.h>
 #include <psp2/touch.h>
 #include <psp2/rtc.h>
@@ -43,6 +44,10 @@ so_module fluffydiver_mod;
 // Debug log file
 static FILE *debug_log = NULL;
 static SceUID debug_fd = -1;
+
+// GTA SA Vita game state detection
+static volatile int game_running = 0;
+static volatile int function_returned = 0;
 
 void debugPrintf(const char *fmt, ...) {
     va_list args;
@@ -91,8 +96,66 @@ void patch_game(void) {
     debugPrintf("Game patching complete\n");
 }
 
-// Forward declaration of comprehensive analysis function (in so_util.c)
-extern int so_analyze_and_try_symbols(so_module *mod, void *fake_env, void *fake_context);
+// GTA SA Vita hang detection thread
+int hang_detection_thread(SceSize args, void *argp) {
+    debugPrintf("[HANG] Hang detection thread started\n");
+
+    // Wait 5 seconds for function to return
+    sceKernelDelayThread(5 * 1000 * 1000);
+
+    if (!function_returned) {
+        debugPrintf("[HANG] Function hasn't returned after 5 seconds\n");
+        debugPrintf("[HANG] This could mean:\n");
+        debugPrintf("[HANG] 1. SUCCESS - Game is running in main loop\n");
+        debugPrintf("[HANG] 2. HANG - Function is waiting for something\n");
+        debugPrintf("[HANG] 3. CRASH - Function crashed without error\n");
+
+        // Test if system is responsive
+        debugPrintf("[HANG] Testing system responsiveness...\n");
+
+        // Try to change screen color to test if we can still render
+        glClearColor(0.0f, 1.0f, 1.0f, 1.0f); // Cyan for "possibly working"
+        glClear(GL_COLOR_BUFFER_BIT);
+        vglSwapBuffers(GL_FALSE);
+
+        debugPrintf("[HANG] If screen changed to cyan, system is responsive\n");
+        debugPrintf("[HANG] Monitoring for game activity...\n");
+
+        // Monitor for 30 more seconds
+        for (int i = 0; i < 30; i++) {
+            sceKernelDelayThread(1000 * 1000); // 1 second
+
+            // Check if function ever returns
+            if (function_returned) {
+                debugPrintf("[HANG] Function returned after %d seconds total\n", 5 + i);
+                game_running = 1;
+                return 0;
+            }
+
+            // Test input responsiveness every 5 seconds
+            if (i % 5 == 0) {
+                SceCtrlData pad;
+                sceCtrlPeekBufferPositive(0, &pad, 1);
+
+                if (pad.buttons != 0) {
+                    debugPrintf("[HANG] Input detected: 0x%08X - Game may be responsive!\n", pad.buttons);
+                    game_running = 1;
+                }
+            }
+        }
+
+        if (!function_returned) {
+            debugPrintf("[HANG] Function still hasn't returned after 35 seconds\n");
+            debugPrintf("[HANG] Assuming game is running in main loop (GTA SA Vita pattern)\n");
+            game_running = 1;
+        }
+    }
+
+    return 0;
+}
+
+// Forward declaration - function is in so_util.c where ELF structures are defined
+extern int so_find_real_entry_points(so_module *mod, void *fake_env, void *fake_context);
 
 int main(int argc, char *argv[]) {
     // Create debug directory and open log FIRST
@@ -100,11 +163,12 @@ int main(int argc, char *argv[]) {
     sceIoMkdir("ux0:data/fluffydiver/", 0777);
 
     // Open debug log with direct I/O for immediate writes
-    debug_fd = sceIoOpen("ux0:data/fluffydiver/debug_direct.log", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+    debug_fd = sceIoOpen("ux0:data/fluffydiver/debug_restored.log", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
     debug_log = fopen("ux0:data/fluffydiver/debug.log", "w");
 
-    debugPrintf("=== Fluffy Diver PS Vita Port ===\n");
-    debugPrintf("Based on GTA SA Vita by TheOfficialFloW\n\n");
+    debugPrintf("=== Fluffy Diver PS Vita Port - Restored ===\n");
+    debugPrintf("Based on GTA SA Vita by TheOfficialFloW\n");
+    debugPrintf("Restored to your original working approach\n\n");
     debugPrintf("Debug log opened successfully\n");
     debugPrintf("Heap size: %d MB\n", _newlib_heap_size_user / (1024*1024));
     debugPrintf("Thread stack: %d MB\n", _pthread_stack_default_user / (1024*1024));
@@ -191,23 +255,21 @@ int main(int argc, char *argv[]) {
     }
     debugPrintf("Module initialization completed\n");
 
-    // Show yellow screen before calling game
+    // Show yellow screen before entry point attempt
     glClearColor(1.0f, 1.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     vglSwapBuffers(GL_FALSE);
 
-    debugPrintf("=== GTA SA VITA ENTRY POINT PATTERN ===\n");
+    debugPrintf("=== RESTORED GTA SA VITA ENTRY POINT PATTERN ===\n");
 
-    // FIRST: Try JNI_OnLoad - many Android games require this for initialization
+    // FIRST: Try JNI_OnLoad
     uintptr_t jni_onload_addr = so_symbol(&fluffydiver_mod, "JNI_OnLoad");
     if (jni_onload_addr != 0) {
-        debugPrintf("Found JNI_OnLoad at 0x%08X - calling first for initialization\n", jni_onload_addr);
+        debugPrintf("Found JNI_OnLoad at 0x%08X - calling first\n", jni_onload_addr);
 
-        // JNI_OnLoad signature: jint JNI_OnLoad(JavaVM* vm, void* reserved)
         typedef int (*jni_onload_t)(void* vm, void* reserved);
         jni_onload_t onload_func = (jni_onload_t)jni_onload_addr;
 
-        // Create fake JavaVM
         static void *fake_vm = (void*)0x99999999;
 
         debugPrintf("Calling JNI_OnLoad...\n");
@@ -217,155 +279,97 @@ int main(int argc, char *argv[]) {
         debugPrintf("No JNI_OnLoad found - skipping\n");
     }
 
-    // SECOND: Try main entry point
+    // SECOND: Try standard entry point with validation
     uintptr_t entry_addr = so_symbol(&fluffydiver_mod, "Java_com_hotdog_jni_Natives_onHotDogCreate");
 
-    if (entry_addr == 0) {
-        debugPrintf("Entry point not found, trying alternatives...\n");
+    if (entry_addr != 0) {
+        uint32_t *code_ptr = (uint32_t*)entry_addr;
+        uint32_t first_inst = code_ptr[0];
+        uint16_t *thumb_ptr = (uint16_t*)entry_addr;
+        uint16_t thumb_inst = thumb_ptr[0];
 
-        // Try other common entry points
-        const char* alternatives[] = {
-            "Java_com_hotdog_jni_Natives_init",
-            "Java_com_hotdog_jni_Natives_nativeInit",
-            "Java_com_hotdog_jni_Natives_onCreate",
-            "android_main",
-            "main",
-            NULL
-        };
+        debugPrintf("=== VALIDATING STANDARD ENTRY POINT ===\n");
+        debugPrintf("Entry point code analysis:\n");
+        debugPrintf("ARM instruction: 0x%08X\n", first_inst);
+        debugPrintf("Thumb instruction: 0x%04X\n", thumb_inst);
 
-        for (int i = 0; alternatives[i] != NULL; i++) {
-            entry_addr = so_symbol(&fluffydiver_mod, alternatives[i]);
-            if (entry_addr != 0) {
-                debugPrintf("Found alternative entry point: %s at 0x%08X\n", alternatives[i], entry_addr);
-                break;
+        // Check for valid ARM or Thumb patterns
+        int has_valid_arm = (first_inst & 0xffff0000) == 0xe92d0000;
+        int has_valid_thumb = (thumb_inst & 0xFF00) == 0xB500;
+
+        if (has_valid_arm || has_valid_thumb) {
+            debugPrintf("✓ Standard entry point has valid code - trying direct call\n");
+
+            // Start hang detection
+            function_returned = 0;
+            SceUID thid = sceKernelCreateThread("hang_detect", hang_detection_thread, 0x10000100, 0x10000, 0, 0, NULL);
+            if (thid >= 0) {
+                sceKernelStartThread(thid, 0, NULL);
             }
-        }
-    }
 
-    if (entry_addr == 0) {
-        debugPrintf("No standard entry points found - trying comprehensive analysis\n");
+            typedef void (*jni_func_t)(void* env, void* thiz);
+            jni_func_t jni_call = (jni_func_t)entry_addr;
 
-        // Call comprehensive symbol analysis function
-        int analysis_result = so_analyze_and_try_symbols(&fluffydiver_mod, fake_env, fake_context);
-        if (analysis_result == 0) {
-            debugPrintf("✓ Found working entry point via comprehensive analysis!\n");
+            debugPrintf("About to call standard entry point...\n");
+            jni_call(fake_env, fake_context);
 
-            // If we get here, the game is running
-            // Cyan screen for complete success
-            glClearColor(0.0f, 1.0f, 1.0f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT);
-            vglSwapBuffers(GL_FALSE);
-
-            debugPrintf("=== INITIALIZATION COMPLETE ===\n");
-            debugPrintf("Game should now be running...\n");
-
-            // Main loop - keep the game alive
-            debugPrintf("Entering main loop...\n");
-            while (1) {
-                // Process input, render, etc.
-                sceKernelDelayThread(16666); // ~60 FPS
-            }
+            function_returned = 1;
+            debugPrintf("✓ Standard entry point returned!\n");
         } else {
-            fatal_error("Comprehensive analysis failed to find working entry point");
-        }
-    }
+            debugPrintf("WARNING: Standard entry point has invalid code patterns!\n");
+            debugPrintf("Using smart entry point scanner...\n");
 
-    // CRITICAL: Even if we found the standard entry point, it might not work
-    // Let's validate it first before trying
-    debugPrintf("=== VALIDATING STANDARD ENTRY POINT ===\n");
-
-    // Check if the found entry point has valid code
-    uint32_t *code_ptr = (uint32_t*)entry_addr;
-    uint32_t first_inst = code_ptr[0];
-    uint16_t *thumb_ptr = (uint16_t*)entry_addr;
-    uint16_t thumb_inst = thumb_ptr[0];
-
-    debugPrintf("Entry point code analysis:\n");
-    debugPrintf("ARM instruction: 0x%08X\n", first_inst);
-    debugPrintf("Thumb instruction: 0x%04X\n", thumb_inst);
-
-    // Check for valid ARM or Thumb patterns
-    int has_valid_arm = (first_inst & 0xffff0000) == 0xe92d0000;
-    int has_valid_thumb = (thumb_inst & 0xFF00) == 0xB500;
-
-    if (!has_valid_arm && !has_valid_thumb) {
-        debugPrintf("WARNING: Standard entry point has invalid code patterns!\n");
-        debugPrintf("Falling back to comprehensive analysis...\n");
-
-        // Call comprehensive symbol analysis function
-        int analysis_result = so_analyze_and_try_symbols(&fluffydiver_mod, fake_env, fake_context);
-        if (analysis_result == 0) {
-            debugPrintf("✓ Found working entry point via comprehensive analysis!\n");
-
-            // If we get here, the game is running
-            // Cyan screen for complete success
-            glClearColor(0.0f, 1.0f, 1.0f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT);
-            vglSwapBuffers(GL_FALSE);
-
-            debugPrintf("=== INITIALIZATION COMPLETE ===\n");
-            debugPrintf("Game should now be running...\n");
-
-            // Main loop - keep the game alive
-            debugPrintf("Entering main loop...\n");
-            while (1) {
-                // Process input, render, etc.
-                sceKernelDelayThread(16666); // ~60 FPS
+            // Use smart entry point scanner instead of random C++ functions
+            int scan_result = so_find_real_entry_points(&fluffydiver_mod, fake_env, fake_context);
+            if (scan_result == 0) {
+                debugPrintf("✓ Found potential entry points!\n");
+            } else {
+                debugPrintf("⚠ No suitable entry points found\n");
             }
+        }
+    } else {
+        debugPrintf("No standard entry point found - using smart entry point scanner\n");
+
+        // Use smart entry point scanner
+        int scan_result = so_find_real_entry_points(&fluffydiver_mod, fake_env, fake_context);
+        if (scan_result == 0) {
+            debugPrintf("✓ Found potential entry points!\n");
         } else {
-            fatal_error("Both standard and comprehensive analysis failed");
+            debugPrintf("⚠ No suitable entry points found\n");
         }
     }
 
-    debugPrintf("=== CALLING ENTRY POINT ===\n");
-    debugPrintf("Entry point address: 0x%08X\n", entry_addr);
+    // The symbol scanner will show us what entry points exist
+    // For now, just show the scan results and exit cleanly
+    debugPrintf("=== ENTRY POINT ANALYSIS COMPLETE ===\n");
+    debugPrintf("Check the log above to see what entry points were found\n");
+    debugPrintf("Next step: Manually try calling the most promising entry points\n");
 
-    // Verify address is in module bounds
-    uintptr_t base = (uintptr_t)fluffydiver_mod.base;
-    if (entry_addr < base || entry_addr >= base + fluffydiver_mod.size) {
-        fatal_error("Entry point address outside module bounds");
-    }
-
-    debugPrintf("Address verification passed: 0x%08X is within bounds 0x%08X-0x%08X\n",
-                entry_addr, base, base + fluffydiver_mod.size);
-
-    // Magenta screen for calling entry point
-    glClearColor(1.0f, 0.0f, 1.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-    vglSwapBuffers(GL_FALSE);
-
-    // Flush logs before calling
-    if (debug_log) fflush(debug_log);
-    if (debug_fd >= 0) sceIoClose(debug_fd);
-
-    debugPrintf("=== DIRECT FUNCTION CALL (GTA SA VITA METHOD) ===\n");
-
-    // Try calling with the most basic approach first
-    debugPrintf("Attempting standard JNI function call...\n");
-
-    // Standard JNI call
-    typedef void (*jni_func_t)(void* env, void* thiz);
-    jni_func_t jni_call = (jni_func_t)entry_addr;
-
-    debugPrintf("About to call with JNI parameters...\n");
-    jni_call(fake_env, fake_context);
-    debugPrintf("✓ JNI call succeeded!\n");
-
-    // If we get here, the function succeeded
-    // Cyan screen for complete success
-    glClearColor(0.0f, 1.0f, 1.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-    vglSwapBuffers(GL_FALSE);
-
-    debugPrintf("=== INITIALIZATION COMPLETE ===\n");
-    debugPrintf("Game should now be running...\n");
-
-    // Main loop - keep the game alive
-    debugPrintf("Entering main loop...\n");
+    // Simple wait loop to keep system responsive
+    debugPrintf("Press START+SELECT to exit...\n");
+    int wait_count = 0;
     while (1) {
-        // Process input, render, etc.
+        SceCtrlData pad;
+        sceCtrlPeekBufferPositive(0, &pad, 1);
+
+        // Exit on Start+Select
+        if ((pad.buttons & SCE_CTRL_START) && (pad.buttons & SCE_CTRL_SELECT)) {
+            debugPrintf("Exit requested by user\n");
+            break;
+        }
+
+        wait_count++;
+        if (wait_count % 300 == 0) { // Every 5 seconds
+            debugPrintf("Waiting for exit command... (%d seconds)\n", wait_count / 60);
+        }
+
         sceKernelDelayThread(16666); // ~60 FPS
     }
+
+    // Cleanup
+    debugPrintf("=== CLEANUP ===\n");
+    if (debug_log) fclose(debug_log);
+    if (debug_fd >= 0) sceIoClose(debug_fd);
 
     return 0;
 }

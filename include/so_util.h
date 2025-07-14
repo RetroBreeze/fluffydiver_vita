@@ -24,6 +24,7 @@ typedef struct so_module {
     size_t plt_rel_size; // DT_PLTRELSZ
 } so_module;
 
+// Core so-loader functions
 int so_file_load(so_module *mod, const char *filename, uintptr_t load_addr);
 int so_load(so_module *mod, const char *path, uintptr_t load_addr);
 int so_relocate(so_module *mod);
@@ -32,8 +33,17 @@ void so_flush_caches(so_module *mod);
 int so_initialize(so_module *mod);
 uintptr_t so_symbol(so_module *mod, const char *symbol);
 void hook_addr(uintptr_t addr, uintptr_t dst);
-int ret0();
 
+// CRITICAL FIX: Add missing function declaration
+int so_analyze_and_try_symbols(so_module *mod, void *fake_env, void *fake_context);
+
+// Utility functions
+int ret0();
+int ret1();
+int retminus1();
+void *retNULL();
+
+// Global variables
 extern void *fake_env;
 extern void *fake_context;
 extern DynLibFunction default_dynlib[];

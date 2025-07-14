@@ -486,7 +486,15 @@ void *retNULL() {
     return NULL;
 }
 
-// Comprehensive symbol analysis and execution function
+// Enhanced symbol analysis with hang detection - moved from main.c
+int so_analyze_and_try_symbols_with_hang_detection(so_module *mod, void *fake_env, void *fake_context,
+                                                   volatile int *function_returned_ptr,
+                                                   int (*hang_detection_func)(SceSize, void*));
+
+// NEW: Real entry point finder (replaces random C++ function calling)
+int so_find_real_entry_points(so_module *mod, void *fake_env, void *fake_context);
+
+// BACK TO YOUR ORIGINAL WORKING APPROACH - Simple and effective
 int so_analyze_and_try_symbols(so_module *mod, void *fake_env, void *fake_context) {
     debugPrintf("=== COMPREHENSIVE SYMBOL ANALYSIS ===\n");
 
@@ -532,7 +540,7 @@ int so_analyze_and_try_symbols(so_module *mod, void *fake_env, void *fake_contex
                     debugPrintf("  ✓ %s has ARM prologue - trying as entry point!\n", name);
                     valid_code_symbols++;
 
-                    // Try this as an entry point
+                    // Try this as an entry point - THIS IS WHERE YOUR LOG CUT OFF
                     debugPrintf("  Attempting to call %s as entry point...\n", name);
                     typedef void (*potential_entry_t)(void* env, void* thiz);
                     potential_entry_t potential_func = (potential_entry_t)sym_addr;
@@ -582,14 +590,382 @@ int so_analyze_and_try_symbols(so_module *mod, void *fake_env, void *fake_contex
         debugPrintf("ERROR: No symbols with valid ARM/Thumb code found!\n");
     }
 
-    debugPrintf("=== FINAL DIAGNOSIS ===\n");
-    debugPrintf("This appears to be an incompatible or corrupted library.\n");
-    debugPrintf("Possible issues:\n");
-    debugPrintf("1. Wrong architecture (x86/x64 instead of ARM)\n");
-    debugPrintf("2. Hardcoded addresses that don't work with so-loader\n");
-    debugPrintf("3. Missing dependencies or initialization requirements\n");
-    debugPrintf("4. Library requires specific Android framework components\n");
-    debugPrintf("5. File corruption during extraction\n");
-
     return -1; // Failed to find working entry point
 }
+
+// Enhanced symbol analysis with hang detection - moved from main.c
+int so_analyze_and_try_symbols_with_hang_detection(so_module *mod, void *fake_env, void *fake_context,
+                                                   volatile int *function_returned_ptr,
+                                                   int (*hang_detection_func)(SceSize, void*)) {
+    debugPrintf("=== RESTORED SIMPLE SYMBOL ANALYSIS ===\n");
+    debugPrintf("Following your original working approach\n");
+
+    if (!mod->hash || !mod->dynstr || !mod->dynsym) {
+        debugPrintf("ERROR: Symbol table not properly loaded\n");
+        return -1;
+    }
+
+    uint32_t *hash = (uint32_t*)mod->hash;
+    uint32_t nchain = hash[1];
+    Elf32_Sym *syms = (Elf32_Sym*)mod->dynsym;
+
+    debugPrintf("Total symbols in library: %d\n", nchain);
+
+    // Look for C++ symbols with valid ARM code (your original approach)
+    int valid_code_symbols = 0;
+
+    for (uint32_t i = 0; i < nchain && i < 100; i++) { // Limit to first 100 for safety
+        const char *name = (char*)mod->dynstr + syms[i].st_name;
+        if (name && strlen(name) > 0) {
+            debugPrintf("Symbol %d: %s (value: 0x%08X)\n", i, name, syms[i].st_value);
+
+            // Check if this symbol points to executable code
+            if (syms[i].st_value != 0) {
+                uintptr_t sym_addr = (uintptr_t)mod->base + syms[i].st_value;
+
+                // Ensure address is within module bounds
+                if (sym_addr >= (uintptr_t)mod->base &&
+                    sym_addr < (uintptr_t)mod->base + mod->size) {
+
+                    uint32_t *code_ptr = (uint32_t*)sym_addr;
+                uint32_t first_inst = code_ptr[0];
+
+                // Check for ARM patterns (your original working detection)
+                if ((first_inst & 0xffff0000) == 0xe92d0000) {
+                    debugPrintf("  ✓ %s has ARM prologue - trying as entry point!\n", name);
+                    valid_code_symbols++;
+
+                    // CRITICAL: This is where your original log cut off
+                    debugPrintf("  Attempting to call %s as entry point...\n", name);
+
+                    // Start hang detection thread (GTA SA Vita approach)
+                    *function_returned_ptr = 0;
+                    SceUID thid = sceKernelCreateThread("hang_detect", hang_detection_func, 0x10000100, 0x10000, 0, 0, NULL);
+                    if (thid >= 0) {
+                        sceKernelStartThread(thid, 0, NULL);
+                        debugPrintf("[HANG] Started hang detection thread\n");
+                    }
+
+                    // Call the function (this is where your log stopped)
+                    typedef void (*potential_entry_t)(void* env, void* thiz);
+                    potential_entry_t potential_func = (potential_entry_t)sym_addr;
+
+                    debugPrintf("  Calling %s...\n", name);
+
+                    // This is the critical call that was working
+                    potential_func(fake_env, fake_context);
+
+                    // If we get here, the function returned
+                    *function_returned_ptr = 1;
+                    debugPrintf("  ✓ %s returned successfully!\n", name);
+                    return 0; // Success!
+
+                } else {
+                    // Check for Thumb patterns (your original approach)
+                    uint16_t *thumb_ptr = (uint16_t*)sym_addr;
+                    uint16_t thumb_inst = thumb_ptr[0];
+
+                    if ((thumb_inst & 0xFF00) == 0xB500) {
+                        debugPrintf("  ✓ %s has Thumb prologue - trying as entry point!\n", name);
+                        valid_code_symbols++;
+
+                        // Start hang detection
+                        *function_returned_ptr = 0;
+                        SceUID thid = sceKernelCreateThread("hang_detect", hang_detection_func, 0x10000100, 0x10000, 0, 0, NULL);
+                        if (thid >= 0) {
+                            sceKernelStartThread(thid, 0, NULL);
+                        }
+
+                        // Try as Thumb (set LSB)
+                        typedef void (*thumb_entry_t)(void* env, void* thiz);
+                        thumb_entry_t thumb_func = (thumb_entry_t)(sym_addr | 1);
+
+                        debugPrintf("  Calling %s in Thumb mode...\n", name);
+                        thumb_func(fake_env, fake_context);
+
+                        *function_returned_ptr = 1;
+                        debugPrintf("  ✓ %s (Thumb) returned successfully!\n", name);
+                        return 0; // Success!
+                    }
+                }
+                    }
+            }
+        }
+    }
+
+    debugPrintf("Symbol analysis complete:\n");
+    debugPrintf("- Valid code symbols found: %d\n", valid_code_symbols);
+
+    if (valid_code_symbols == 0) {
+        debugPrintf("ERROR: No symbols with valid ARM/Thumb code found!\n");
+        return -1;
+    }
+
+    debugPrintf("Found valid code but no successful calls\n");
+    return -1;
+                                                   }
+
+                                                   // Enhanced symbol analysis to find actual game entry points
+                                                   // Based on GTA SA Vita methodology for finding proper initialization functions
+                                                   int so_find_real_entry_points(so_module *mod, void *fake_env, void *fake_context) {
+                                                       debugPrintf("=== SEARCHING FOR REAL GAME ENTRY POINTS ===\n");
+                                                       debugPrintf("Based on GTA SA Vita entry point identification methodology\n");
+
+                                                       if (!mod->hash || !mod->dynstr || !mod->dynsym) {
+                                                           debugPrintf("ERROR: Symbol table not properly loaded\n");
+                                                           return -1;
+                                                       }
+
+                                                       uint32_t *hash = (uint32_t*)mod->hash;
+                                                       uint32_t nchain = hash[1];
+                                                       Elf32_Sym *syms = (Elf32_Sym*)mod->dynsym;
+
+                                                       debugPrintf("Scanning %d symbols for actual game entry points...\n", nchain);
+
+                                                       // Phase 1: Look for standard Android game entry points
+                                                       debugPrintf("\n=== PHASE 1: Standard Android Game Entry Points ===\n");
+                                                       const char* android_entry_patterns[] = {
+                                                           "Java_com_",                    // JNI functions
+                                                           "android_main",                 // Native Activity main
+                                                           "ANativeActivity_onCreate",     // Native Activity lifecycle
+                                                           "JNI_OnLoad",                  // JNI initialization
+                                                           "_Z*onCreate*",                 // C++ onCreate functions
+                                                           "_Z*onStart*",                 // C++ onStart functions
+                                                           "_Z*onResume*",                // C++ onResume functions
+                                                           "nativeInit",                  // Common native init function
+                                                           "nativeCreate",                // Common native create function
+                                                           "gameInit",                    // Game initialization
+                                                           "engineInit",                  // Engine initialization
+                                                           NULL
+                                                       };
+
+                                                       int android_entries_found = 0;
+                                                       for (uint32_t i = 0; i < nchain && i < 500; i++) { // Search more symbols for entry points
+                                                           const char *name = (char*)mod->dynstr + syms[i].st_name;
+                                                           if (name && strlen(name) > 0) {
+
+                                                               // Check against android entry patterns
+                                                               for (int p = 0; android_entry_patterns[p] != NULL; p++) {
+                                                                   const char *pattern = android_entry_patterns[p];
+
+                                                                   // Simple pattern matching
+                                                                   if (strstr(name, "Java_com_") ||
+                                                                       strstr(name, "android_main") ||
+                                                                       strstr(name, "JNI_OnLoad") ||
+                                                                       strstr(name, "onCreate") ||
+                                                                       strstr(name, "onStart") ||
+                                                                       strstr(name, "onResume") ||
+                                                                       strstr(name, "nativeInit") ||
+                                                                       strstr(name, "nativeCreate") ||
+                                                                       strstr(name, "gameInit") ||
+                                                                       strstr(name, "engineInit")) {
+
+                                                                       if (syms[i].st_value != 0) {
+                                                                           uintptr_t sym_addr = (uintptr_t)mod->base + syms[i].st_value;
+
+                                                                           if (sym_addr >= (uintptr_t)mod->base && sym_addr < (uintptr_t)mod->base + mod->size) {
+                                                                               uint32_t *code_ptr = (uint32_t*)sym_addr;
+                                                                               uint32_t first_inst = code_ptr[0];
+
+                                                                               // Check if it has valid code
+                                                                               if ((first_inst & 0xffff0000) == 0xe92d0000) {
+                                                                                   debugPrintf("✓ ANDROID ENTRY: %s at 0x%08X (ARM code)\n", name, sym_addr);
+                                                                                   android_entries_found++;
+                                                                               } else {
+                                                                                   uint16_t *thumb_ptr = (uint16_t*)sym_addr;
+                                                                                   uint16_t thumb_inst = thumb_ptr[0];
+                                                                                   if ((thumb_inst & 0xFF00) == 0xB500) {
+                                                                                       debugPrintf("✓ ANDROID ENTRY: %s at 0x%08X (Thumb code)\n", name, sym_addr);
+                                                                                       android_entries_found++;
+                                                                                   }
+                                                                               }
+                                                                           }
+                                                                       }
+                                                                       break;
+                                                                       }
+                                                               }
+                                                           }
+                                                       }
+
+                                                       // Phase 2: Look for game-specific initialization functions
+                                                       debugPrintf("\n=== PHASE 2: Game-Specific Functions ===\n");
+                                                       const char* game_patterns[] = {
+                                                           "init",
+                                                           "Init",
+                                                           "start",
+                                                           "Start",
+                                                           "main",
+                                                           "Main",
+                                                           "setup",
+                                                           "Setup",
+                                                           "begin",
+                                                           "Begin",
+                                                           "load",
+                                                           "Load",
+                                                           "create",
+                                                           "Create",
+                                                           NULL
+                                                       };
+
+                                                       int game_entries_found = 0;
+                                                       for (uint32_t i = 0; i < nchain && i < 300; i++) { // Limited search for game functions
+                                                           const char *name = (char*)mod->dynstr + syms[i].st_name;
+                                                           if (name && strlen(name) > 3) { // Skip very short names
+
+                                                               // Look for game initialization patterns
+                                                               for (int p = 0; game_patterns[p] != NULL; p++) {
+                                                                   if (strstr(name, game_patterns[p])) {
+
+                                                                       if (syms[i].st_value != 0) {
+                                                                           uintptr_t sym_addr = (uintptr_t)mod->base + syms[i].st_value;
+
+                                                                           if (sym_addr >= (uintptr_t)mod->base && sym_addr < (uintptr_t)mod->base + mod->size) {
+                                                                               uint32_t *code_ptr = (uint32_t*)sym_addr;
+                                                                               uint32_t first_inst = code_ptr[0];
+
+                                                                               if ((first_inst & 0xffff0000) == 0xe92d0000) {
+                                                                                   debugPrintf("✓ GAME FUNCTION: %s at 0x%08X (ARM code)\n", name, sym_addr);
+                                                                                   game_entries_found++;
+                                                                               }
+                                                                           }
+                                                                       }
+                                                                       break;
+                                                                   }
+                                                               }
+                                                           }
+                                                       }
+
+                                                       // Phase 3: Look for engine/framework specific functions
+                                                       debugPrintf("\n=== PHASE 3: Engine/Framework Functions ===\n");
+                                                       const char* engine_patterns[] = {
+                                                           "update",
+                                                           "Update",
+                                                           "render",
+                                                           "Render",
+                                                           "tick",
+                                                           "Tick",
+                                                           "loop",
+                                                           "Loop",
+                                                           "run",
+                                                           "Run",
+                                                           "step",
+                                                           "Step",
+                                                           NULL
+                                                       };
+
+                                                       int engine_entries_found = 0;
+                                                       for (uint32_t i = 0; i < nchain && i < 200; i++) { // Limited search for engine functions
+                                                           const char *name = (char*)mod->dynstr + syms[i].st_name;
+                                                           if (name && strlen(name) > 3) {
+
+                                                               for (int p = 0; engine_patterns[p] != NULL; p++) {
+                                                                   if (strstr(name, engine_patterns[p])) {
+
+                                                                       if (syms[i].st_value != 0) {
+                                                                           uintptr_t sym_addr = (uintptr_t)mod->base + syms[i].st_value;
+
+                                                                           if (sym_addr >= (uintptr_t)mod->base && sym_addr < (uintptr_t)mod->base + mod->size) {
+                                                                               uint32_t *code_ptr = (uint32_t*)sym_addr;
+                                                                               uint32_t first_inst = code_ptr[0];
+
+                                                                               if ((first_inst & 0xffff0000) == 0xe92d0000) {
+                                                                                   debugPrintf("✓ ENGINE FUNCTION: %s at 0x%08X (ARM code)\n", name, sym_addr);
+                                                                                   engine_entries_found++;
+                                                                               }
+                                                                           }
+                                                                       }
+                                                                       break;
+                                                                   }
+                                                               }
+                                                           }
+                                                       }
+
+                                                       // Phase 4: Look for Fluffy Diver specific functions
+                                                       debugPrintf("\n=== PHASE 4: Fluffy Diver Specific Functions ===\n");
+                                                       const char* fluffy_patterns[] = {
+                                                           "fluffy",
+                                                           "Fluffy",
+                                                           "diver",
+                                                           "Diver",
+                                                           "game",
+                                                           "Game",
+                                                           "app",
+                                                           "App",
+                                                           "hotdog",  // From the JNI package name
+                                                           "HotDog",
+                                                           NULL
+                                                       };
+
+                                                       int fluffy_entries_found = 0;
+                                                       for (uint32_t i = 0; i < nchain && i < 200; i++) {
+                                                           const char *name = (char*)mod->dynstr + syms[i].st_name;
+                                                           if (name && strlen(name) > 3) {
+
+                                                               for (int p = 0; fluffy_patterns[p] != NULL; p++) {
+                                                                   if (strstr(name, fluffy_patterns[p])) {
+
+                                                                       if (syms[i].st_value != 0) {
+                                                                           uintptr_t sym_addr = (uintptr_t)mod->base + syms[i].st_value;
+
+                                                                           if (sym_addr >= (uintptr_t)mod->base && sym_addr < (uintptr_t)mod->base + mod->size) {
+                                                                               uint32_t *code_ptr = (uint32_t*)sym_addr;
+                                                                               uint32_t first_inst = code_ptr[0];
+
+                                                                               if ((first_inst & 0xffff0000) == 0xe92d0000 ||
+                                                                                   (((uint16_t*)sym_addr)[0] & 0xFF00) == 0xB500) {
+                                                                                   debugPrintf("✓ FLUFFY DIVER FUNCTION: %s at 0x%08X\n", name, sym_addr);
+                                                                               fluffy_entries_found++;
+                                                                                   }
+                                                                           }
+                                                                       }
+                                                                       break;
+                                                                   }
+                                                               }
+                                                           }
+                                                       }
+
+                                                       // Phase 5: Manual inspection of promising symbols around known working function
+                                                       debugPrintf("\n=== PHASE 5: Symbols Around Working Vector Function ===\n");
+                                                       debugPrintf("Checking symbols near _ZNK9hdVector2miERKS_ for related initialization functions...\n");
+
+                                                       int related_functions_found = 0;
+                                                       // Look at symbols around the vector function we found
+                                                       for (uint32_t i = 0; i < nchain && i < 50; i++) { // Check first 50 symbols thoroughly
+                                                           const char *name = (char*)mod->dynstr + syms[i].st_name;
+                                                           if (name && strlen(name) > 10) { // Look for substantial function names
+
+                                                               if (syms[i].st_value != 0) {
+                                                                   uintptr_t sym_addr = (uintptr_t)mod->base + syms[i].st_value;
+
+                                                                   if (sym_addr >= (uintptr_t)mod->base && sym_addr < (uintptr_t)mod->base + mod->size) {
+                                                                       uint32_t *code_ptr = (uint32_t*)sym_addr;
+                                                                       uint32_t first_inst = code_ptr[0];
+
+                                                                       if ((first_inst & 0xffff0000) == 0xe92d0000) {
+                                                                           debugPrintf("✓ SUBSTANTIAL FUNCTION: %s at 0x%08X\n", name, sym_addr);
+                                                                           related_functions_found++;
+                                                                       }
+                                                                   }
+                                                               }
+                                                           }
+                                                       }
+
+                                                       // Summary
+                                                       debugPrintf("\n=== ENTRY POINT SEARCH SUMMARY ===\n");
+                                                       debugPrintf("Android entry points found: %d\n", android_entries_found);
+                                                       debugPrintf("Game functions found: %d\n", game_entries_found);
+                                                       debugPrintf("Engine functions found: %d\n", engine_entries_found);
+                                                       debugPrintf("Fluffy Diver functions found: %d\n", fluffy_entries_found);
+                                                       debugPrintf("Other substantial functions: %d\n", related_functions_found);
+
+                                                       int total_candidates = android_entries_found + game_entries_found + engine_entries_found + fluffy_entries_found;
+
+                                                       if (total_candidates > 0) {
+                                                           debugPrintf("✓ Found %d potential entry point candidates\n", total_candidates);
+                                                           debugPrintf("Recommendation: Try calling the Android entry points first\n");
+                                                           return 0;
+                                                       } else {
+                                                           debugPrintf("⚠ No obvious entry points found - library may need different approach\n");
+                                                           return -1;
+                                                       }
+                                                   }
