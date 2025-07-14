@@ -1,7 +1,7 @@
 /*
  * fios.c - File I/O management system for Fluffy Diver
  * Based on GTA SA Vita FIOS methodology
- * Reference: https://github.com/TheOfficialFloW/conduit_vita/blob/master/loader/fios.c
+ * Reference: https://github.com/TheOfficialFloW/gtasa_vita/blob/master/loader/fios.c
  */
 
 #include <vitasdk.h>
@@ -225,7 +225,7 @@ int fios_mkdir(const char *path) {
     char *translated = fios_translate_path(path);
 
     int result = sceIoMkdir(translated, 0777);
-    if (result < 0 && result != SCE_ERROR_ERRNO_EEXIST) {
+    if (result < 0 && result != -17) { // EEXIST
         printf("FIOS: ERROR - Cannot create directory %s: 0x%08X\n", translated, result);
         return -1;
     }

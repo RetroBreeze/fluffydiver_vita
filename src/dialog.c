@@ -1,7 +1,7 @@
 /*
  * dialog.c - Error dialog system for Fluffy Diver
  * Based on GTA SA Vita dialog methodology
- * Reference: https://github.com/TheOfficialFloW/conduit_vita/blob/master/loader/dialog.c
+ * Reference: https://github.com/TheOfficialFloW/gtasa_vita/blob/master/loader/dialog.c
  */
 
 #include <vitasdk.h>
@@ -58,7 +58,7 @@ void dialog_error(const char *fmt, ...) {
 
     param.mode = SCE_MSG_DIALOG_MODE_USER_MSG;
     param.userMsgParam->buttonType = SCE_MSG_DIALOG_BUTTON_TYPE_OK;
-    param.userMsgParam->msg = message;
+    param.userMsgParam->msg = (const SceChar8 *)message;
 
     int ret = sceMsgDialogInit(&param);
     if (ret < 0) {
@@ -109,7 +109,7 @@ void dialog_warning(const char *fmt, ...) {
 
     param.mode = SCE_MSG_DIALOG_MODE_USER_MSG;
     param.userMsgParam->buttonType = SCE_MSG_DIALOG_BUTTON_TYPE_OK;
-    param.userMsgParam->msg = full_message;
+    param.userMsgParam->msg = (const SceChar8 *)full_message;
 
     int ret = sceMsgDialogInit(&param);
     if (ret < 0) {
@@ -156,7 +156,7 @@ void dialog_info(const char *fmt, ...) {
 
     param.mode = SCE_MSG_DIALOG_MODE_USER_MSG;
     param.userMsgParam->buttonType = SCE_MSG_DIALOG_BUTTON_TYPE_OK;
-    param.userMsgParam->msg = message;
+    param.userMsgParam->msg = (const SceChar8 *)message;
 
     int ret = sceMsgDialogInit(&param);
     if (ret < 0) {
@@ -203,7 +203,7 @@ int dialog_confirm(const char *fmt, ...) {
 
     param.mode = SCE_MSG_DIALOG_MODE_USER_MSG;
     param.userMsgParam->buttonType = SCE_MSG_DIALOG_BUTTON_TYPE_YESNO;
-    param.userMsgParam->msg = message;
+    param.userMsgParam->msg = (const SceChar8 *)message;
 
     int ret = sceMsgDialogInit(&param);
     if (ret < 0) {
@@ -257,7 +257,7 @@ int dialog_progress_start(const char *message) {
 
     param.mode = SCE_MSG_DIALOG_MODE_PROGRESS_BAR;
     param.progBarParam->barType = SCE_MSG_DIALOG_PROGRESSBAR_TYPE_PERCENTAGE;
-    param.progBarParam->msg = message;
+    param.progBarParam->msg = (const SceChar8 *)message;
 
     int ret = sceMsgDialogInit(&param);
     if (ret < 0) {

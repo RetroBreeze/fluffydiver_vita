@@ -1,7 +1,7 @@
 /*
  * main.c - Complete Fluffy Diver Port using Full GTA SA Vita Methodology
  * Based on successful ports: Modern Combat 3, Mass Effect, Galaxy on Fire 2, The Conduit
- * Reference: https://github.com/TheOfficialFloW/conduit_vita/blob/master/loader/main.c
+ * Reference: https://github.com/TheOfficialFloW/gtasa_vita/blob/master/loader/main.c
  */
 
 #include <vitasdk.h>
@@ -50,6 +50,21 @@ so_module fluffydiver_mod;
 
 // Debug logging
 static FILE *debug_log = NULL;
+
+// ===== GTA SA VITA MEMORY WRAPPERS =====
+// These are CRITICAL for so-loader compatibility
+
+void *__wrap_memcpy(void *dest, const void *src, size_t n) {
+    return sceClibMemcpy(dest, src, n);
+}
+
+void *__wrap_memmove(void *dest, const void *src, size_t n) {
+    return sceClibMemmove(dest, src, n);
+}
+
+void *__wrap_memset(void *s, int c, size_t n) {
+    return sceClibMemset(s, c, n);
+}
 
 void debugPrintf(const char *fmt, ...) {
     va_list args;

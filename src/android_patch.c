@@ -18,6 +18,7 @@
 
 #include "config.h"
 #include "fios.h"
+#include "jni_patch.h"  // Include JNI types
 
 // External debug function
 extern void debugPrintf(const char *fmt, ...);
@@ -32,6 +33,52 @@ extern void debugPrintf(const char *fmt, ...);
 #define ANDROID_LOG_ERROR   6
 #define ANDROID_LOG_FATAL   7
 #define ANDROID_LOG_SILENT  8
+
+// ===== ANDROID SENSOR TYPES =====
+#define ASENSOR_TYPE_ACCELEROMETER 1
+#define ASENSOR_TYPE_MAGNETIC_FIELD 2
+#define ASENSOR_TYPE_GYROSCOPE 4
+#define ASENSOR_TYPE_LIGHT 5
+#define ASENSOR_TYPE_PROXIMITY 8
+
+// ===== ANDROID SENSOR STRUCTURES =====
+typedef struct ASensorVector {
+    union {
+        float v[3];
+        struct {
+            float x;
+            float y;
+            float z;
+        };
+        struct {
+            float azimuth;
+            float pitch;
+            float roll;
+        };
+    };
+    int8_t status;
+    uint8_t reserved[3];
+} ASensorVector;
+
+typedef struct ASensorEvent {
+    int32_t version;
+    int32_t sensor;
+    int32_t type;
+    int32_t reserved0;
+    int64_t timestamp;
+    union {
+        float data[16];
+        ASensorVector vector;
+        ASensorVector acceleration;
+        ASensorVector magnetic;
+        ASensorVector gyro;
+        float temperature;
+        float distance;
+        float light;
+        float pressure;
+    };
+    int32_t reserved1[4];
+} ASensorEvent;
 
 // ===== ANDROID LOGGING FUNCTIONS =====
 
@@ -314,7 +361,6 @@ int32_t ANativeWindow_setBuffersGeometry(ANativeWindow *window, int32_t width, i
 typedef struct ASensorManager ASensorManager;
 typedef struct ASensor ASensor;
 typedef struct ASensorEventQueue ASensorEventQueue;
-typedef struct ASensorEvent ASensorEvent;
 
 ASensorManager *ASensorManager_getInstance() {
     debugPrintf("Android: ASensorManager_getInstance()\n");
@@ -350,7 +396,7 @@ ssize_t ASensorEventQueue_getEvents(ASensorEventQueue *queue, ASensorEvent *even
     // Simulate sensor data if gyroscope is enabled
     if (config_get_gyroscope() && count > 0) {
         // Could read actual Vita motion sensor here
-        events[0].type = 4; // ASENSOR_TYPE_GYROSCOPE
+        events[0].type = ASENSOR_TYPE_GYROSCOPE;
         events[0].gyro.x = 0.0f;
         events[0].gyro.y = 0.0f;
         events[0].gyro.z = 0.0f;
@@ -463,9 +509,7 @@ void *AContentResolver_query(AContentResolver *resolver, const char *uri, const 
 
                              // ===== ANDROID MISC FUNCTIONS =====
 
-                             void android_set_abort_message(const char *msg) {
-                                 debugPrintf("Android: android_set_abort_message(%s)\n", msg ? msg : "NULL");
-                             }
+                             // android_set_abort_message is defined in default_dynlib.c
 
                              void *android_dlopen(const char *filename, int flag) {
                                  debugPrintf("Android: android_dlopen(%s, %d)\n", filename ? filename : "NULL", flag);
@@ -489,8 +533,7 @@ void *AContentResolver_query(AContentResolver *resolver, const char *uri, const 
 
                              // ===== ANDROID JAVA VM STUBS =====
 
-                             typedef struct JavaVM JavaVM;
-                             typedef struct JNIEnv JNIEnv;
+                             // JavaVM is already defined in jni_patch.h
 
                              int JNI_GetDefaultJavaVMInitArgs(void *args) {
                                  debugPrintf("Android: JNI_GetDefaultJavaVMInitArgs()\n");
