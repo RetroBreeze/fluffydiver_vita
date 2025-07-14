@@ -32,6 +32,15 @@ extern void *ALooper_prepare(int opts);
 extern int ALooper_pollOnce(int timeoutMillis, int *outFd, int *outEvents, void **outData);
 extern void android_set_abort_message(const char *msg);
 
+// Stack protection - CRITICAL for Android games
+static uintptr_t __stack_chk_guard_value = 0x12345678;
+
+// Import stub functions from so_util.c
+extern int ret0();
+extern int ret1();
+extern int retminus1();
+extern void *retNULL();
+
 // File I/O hooks
 FILE *fopen_hook(const char *filename, const char *mode) {
     char path[512];
@@ -69,19 +78,13 @@ int pthread_mutex_unlock_fake(void **mutex) {
     return sceKernelUnlockLwMutex(*mutex, 1);
 }
 
-// Import stub functions from so_util.c
-extern int ret0();
-extern int ret1();
-extern int retminus1();
-extern void *retNULL();
-
 // JNI_OnLoad stub
 int JNI_OnLoad(void *vm, void *reserved) {
     printf("JNI_OnLoad called\n");
     return 0x00010006; // JNI_VERSION_1_6
 }
 
-// Complete symbol table - GTA SA Vita style with Android API support
+// COMPLETE symbol table - Every possible symbol from objdump
 DynLibFunction default_dynlib[] = {
     // JNI
     {"JNI_OnLoad", (uintptr_t)&JNI_OnLoad},
@@ -306,6 +309,7 @@ DynLibFunction default_dynlib[] = {
     {"__cxa_guard_acquire", (uintptr_t)&ret1},
     {"__cxa_guard_release", (uintptr_t)&ret0},
     {"__cxa_atexit", (uintptr_t)&ret0},
+    {"__cxa_call_unexpected", (uintptr_t)&ret0},
     {"__aeabi_atexit", (uintptr_t)&ret0},
 
     // ARM EABI support
@@ -318,19 +322,19 @@ DynLibFunction default_dynlib[] = {
     {"__aeabi_idivmod", (uintptr_t)&ret0},
     {"__aeabi_uidivmod", (uintptr_t)&ret0},
 
-    // Stack protection
+    // Stack protection - CRITICAL: __stack_chk_guard must be data, not function
     {"__stack_chk_fail", (uintptr_t)&ret0},
-    {"__stack_chk_guard", (uintptr_t)&ret0},
+    {"__stack_chk_guard", (uintptr_t)&__stack_chk_guard_value},
 
     // Assert
     {"__assert", (uintptr_t)&ret0},
     {"__assert2", (uintptr_t)&ret0},
 
-    // Locale (remove if not available on Vita)
+    // Locale
     {"setlocale", (uintptr_t)&ret0},
     {"localeconv", (uintptr_t)&ret0},
 
-    // Character classification (use stubs if not available)
+    // Character classification
     {"isalnum", (uintptr_t)&isalnum},
     {"isalpha", (uintptr_t)&isalpha},
     {"isdigit", (uintptr_t)&isdigit},

@@ -1,6 +1,6 @@
 /*
- * main.c - Restored GTA SA Vita simple methodology with hang detection
- * Based on your original working approach
+ * main.c - Simple GTA SA Vita methodology with direct function call
+ * Based on your original working approach + actual entry point
  */
 
 #include <psp2/io/dirent.h>
@@ -154,24 +154,18 @@ int hang_detection_thread(SceSize args, void *argp) {
     return 0;
 }
 
-// Forward declaration - function is in so_util.c where ELF structures are defined
-extern int so_find_real_entry_points(so_module *mod, void *fake_env, void *fake_context);
-
 int main(int argc, char *argv[]) {
     // Create debug directory and open log FIRST
     sceIoMkdir("ux0:data/", 0777);
     sceIoMkdir("ux0:data/fluffydiver/", 0777);
 
     // Open debug log with direct I/O for immediate writes
-    debug_fd = sceIoOpen("ux0:data/fluffydiver/debug_restored.log", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+    debug_fd = sceIoOpen("ux0:data/fluffydiver/debug_simple.log", SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
     debug_log = fopen("ux0:data/fluffydiver/debug.log", "w");
 
-    debugPrintf("=== Fluffy Diver PS Vita Port - Restored ===\n");
+    debugPrintf("=== Fluffy Diver PS Vita Port - Simple Call ===\n");
     debugPrintf("Based on GTA SA Vita by TheOfficialFloW\n");
-    debugPrintf("Restored to your original working approach\n\n");
-    debugPrintf("Debug log opened successfully\n");
-    debugPrintf("Heap size: %d MB\n", _newlib_heap_size_user / (1024*1024));
-    debugPrintf("Thread stack: %d MB\n", _pthread_stack_default_user / (1024*1024));
+    debugPrintf("Direct call to discovered entry point\n\n");
 
     // Initialize SceAppUtil (from GTA SA Vita)
     debugPrintf("Initializing SceAppUtil...\n");
@@ -180,7 +174,6 @@ int main(int argc, char *argv[]) {
     memset(&init_param, 0, sizeof(SceAppUtilInitParam));
     memset(&boot_param, 0, sizeof(SceAppUtilBootParam));
     sceAppUtilInit(&init_param, &boot_param);
-    debugPrintf("SceAppUtil initialized\n");
 
     debugPrintf("Initializing touch and controls...\n");
     // GTA SA Vita initialization sequence
@@ -189,185 +182,141 @@ int main(int argc, char *argv[]) {
     sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG_WIDE);
 
     debugPrintf("Initializing pthread...\n");
-    // Setup memory and threading - pthread_init returns int
     int pthread_ret = pthread_init();
     debugPrintf("pthread_init returned: %d\n", pthread_ret);
 
     debugPrintf("Creating data directory...\n");
-    // Create data directory
     sceIoMkdir("ux0:data/fluffydiver", 0777);
 
     debugPrintf("Initializing VitaGL...\n");
-    // Initialize VitaGL
     vglInitExtended(0, 960, 544, 0x1800000, SCE_GXM_MULTISAMPLE_4X);
     vglUseVram(GL_TRUE);
 
-    // NOW we can use OpenGL
+    // Green screen - initialization
     debugPrintf("VitaGL initialized, showing green screen...\n");
     glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     vglSwapBuffers(GL_FALSE);
 
     debugPrintf("Loading libFluffyDiver.so...\n");
-    // Load shared object
     if (so_load(&fluffydiver_mod, "app0:lib/libFluffyDiver.so", LOAD_ADDRESS) < 0) {
-        debugPrintf("ERROR: Failed to load .so file\n");
         fatal_error("Failed to load shared object");
     }
     debugPrintf("SO loaded successfully at 0x%08X\n", LOAD_ADDRESS);
 
     debugPrintf("Relocating...\n");
-    // Relocate
     if (so_relocate(&fluffydiver_mod) < 0) {
         fatal_error("Failed to relocate");
     }
-    debugPrintf("Relocation complete\n");
 
     debugPrintf("Resolving symbols...\n");
-    // Resolve symbols - CRITICAL STEP FROM GTA SA VITA
-    // Use 0 for non-strict mode (don't fail on missing symbols)
     if (so_resolve(&fluffydiver_mod, default_dynlib, default_dynlib_size, 0) < 0) {
         fatal_error("Failed to resolve symbols");
     }
-    debugPrintf("Symbol resolution complete\n");
 
     debugPrintf("Patching game...\n");
-    // Patch game
     patch_game();
 
     debugPrintf("Setting up JNI...\n");
-    // Setup JNI
-    debugPrintf("About to call jni_init()...\n");
     jni_init();
-    debugPrintf("jni_init() completed successfully\n");
 
     debugPrintf("Flushing caches...\n");
-    // Flush caches - CRITICAL STEP FROM GTA SA VITA
-    debugPrintf("About to flush caches...\n");
     so_flush_caches(&fluffydiver_mod);
-    debugPrintf("Cache flush completed\n");
 
     debugPrintf("Initializing module...\n");
-    // Initialize module - CRITICAL STEP FROM GTA SA VITA
-    debugPrintf("About to initialize module...\n");
     if (so_initialize(&fluffydiver_mod) < 0) {
         fatal_error("Failed to initialize module");
     }
-    debugPrintf("Module initialization completed\n");
 
-    // Show yellow screen before entry point attempt
+    // Yellow screen - about to call game
     glClearColor(1.0f, 1.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     vglSwapBuffers(GL_FALSE);
 
-    debugPrintf("=== RESTORED GTA SA VITA ENTRY POINT PATTERN ===\n");
+    debugPrintf("=== CALLING DISCOVERED ENTRY POINT ===\n");
 
-    // FIRST: Try JNI_OnLoad
-    uintptr_t jni_onload_addr = so_symbol(&fluffydiver_mod, "JNI_OnLoad");
-    if (jni_onload_addr != 0) {
-        debugPrintf("Found JNI_OnLoad at 0x%08X - calling first\n", jni_onload_addr);
+    // Look for the entry point we found
+    uintptr_t entry_addr = so_symbol(&fluffydiver_mod, "Java_com_hotdog_libraryInterface_hdNativeInterface_OnLibraryInitialized");
 
-        typedef int (*jni_onload_t)(void* vm, void* reserved);
-        jni_onload_t onload_func = (jni_onload_t)jni_onload_addr;
-
-        static void *fake_vm = (void*)0x99999999;
-
-        debugPrintf("Calling JNI_OnLoad...\n");
-        int onload_result = onload_func(&fake_vm, NULL);
-        debugPrintf("JNI_OnLoad returned: 0x%08X\n", onload_result);
-    } else {
-        debugPrintf("No JNI_OnLoad found - skipping\n");
+    if (entry_addr == 0) {
+        debugPrintf("ERROR: OnLibraryInitialized entry point not found\n");
+        fatal_error("Entry point not found");
     }
 
-    // SECOND: Try standard entry point with validation
-    uintptr_t entry_addr = so_symbol(&fluffydiver_mod, "Java_com_hotdog_jni_Natives_onHotDogCreate");
+    debugPrintf("Found OnLibraryInitialized at 0x%08X\n", entry_addr);
 
-    if (entry_addr != 0) {
-        uint32_t *code_ptr = (uint32_t*)entry_addr;
-        uint32_t first_inst = code_ptr[0];
-        uint16_t *thumb_ptr = (uint16_t*)entry_addr;
-        uint16_t thumb_inst = thumb_ptr[0];
+    // Validate ARM code
+    uint32_t *code_ptr = (uint32_t*)entry_addr;
+    uint32_t first_inst = code_ptr[0];
+    debugPrintf("First instruction: 0x%08X\n", first_inst);
 
-        debugPrintf("=== VALIDATING STANDARD ENTRY POINT ===\n");
-        debugPrintf("Entry point code analysis:\n");
-        debugPrintf("ARM instruction: 0x%08X\n", first_inst);
-        debugPrintf("Thumb instruction: 0x%04X\n", thumb_inst);
-
-        // Check for valid ARM or Thumb patterns
-        int has_valid_arm = (first_inst & 0xffff0000) == 0xe92d0000;
-        int has_valid_thumb = (thumb_inst & 0xFF00) == 0xB500;
-
-        if (has_valid_arm || has_valid_thumb) {
-            debugPrintf("✓ Standard entry point has valid code - trying direct call\n");
-
-            // Start hang detection
-            function_returned = 0;
-            SceUID thid = sceKernelCreateThread("hang_detect", hang_detection_thread, 0x10000100, 0x10000, 0, 0, NULL);
-            if (thid >= 0) {
-                sceKernelStartThread(thid, 0, NULL);
-            }
-
-            typedef void (*jni_func_t)(void* env, void* thiz);
-            jni_func_t jni_call = (jni_func_t)entry_addr;
-
-            debugPrintf("About to call standard entry point...\n");
-            jni_call(fake_env, fake_context);
-
-            function_returned = 1;
-            debugPrintf("✓ Standard entry point returned!\n");
-        } else {
-            debugPrintf("WARNING: Standard entry point has invalid code patterns!\n");
-            debugPrintf("Using smart entry point scanner...\n");
-
-            // Use smart entry point scanner instead of random C++ functions
-            int scan_result = so_find_real_entry_points(&fluffydiver_mod, fake_env, fake_context);
-            if (scan_result == 0) {
-                debugPrintf("✓ Found potential entry points!\n");
-            } else {
-                debugPrintf("⚠ No suitable entry points found\n");
-            }
-        }
+    if ((first_inst & 0xffff0000) != 0xe92d0000) {
+        debugPrintf("WARNING: Unexpected instruction pattern\n");
     } else {
-        debugPrintf("No standard entry point found - using smart entry point scanner\n");
-
-        // Use smart entry point scanner
-        int scan_result = so_find_real_entry_points(&fluffydiver_mod, fake_env, fake_context);
-        if (scan_result == 0) {
-            debugPrintf("✓ Found potential entry points!\n");
-        } else {
-            debugPrintf("⚠ No suitable entry points found\n");
-        }
+        debugPrintf("✓ Valid ARM prologue detected\n");
     }
 
-    // The symbol scanner will show us what entry points exist
-    // For now, just show the scan results and exit cleanly
-    debugPrintf("=== ENTRY POINT ANALYSIS COMPLETE ===\n");
-    debugPrintf("Check the log above to see what entry points were found\n");
-    debugPrintf("Next step: Manually try calling the most promising entry points\n");
+    // Start hang detection
+    function_returned = 0;
+    SceUID hang_thread = sceKernelCreateThread("hang_detect", hang_detection_thread, 0x10000100, 0x10000, 0, 0, NULL);
 
-    // Simple wait loop to keep system responsive
+    if (hang_thread >= 0) {
+        sceKernelStartThread(hang_thread, 0, NULL);
+        debugPrintf("Started hang detection thread\n");
+    }
+
+    // Blue screen - about to call
+    glClearColor(0.0f, 0.5f, 1.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    vglSwapBuffers(GL_FALSE);
+
+    debugPrintf("About to call OnLibraryInitialized...\n");
+    debugPrintf("Parameters: fake_env=%p, fake_context=%p\n", fake_env, fake_context);
+
+    // THE CALL - with GTA SA Vita style error handling
+    typedef void (*OnLibraryInitialized_t)(void* env, void* thiz);
+    OnLibraryInitialized_t init_func = (OnLibraryInitialized_t)entry_addr;
+
+    debugPrintf("Calling game initialization...\n");
+    debugPrintf("Entry point address: 0x%08X\n", entry_addr);
+    debugPrintf("Function pointer: %p\n", init_func);
+
+    // Flush logs before call
+    if (debug_log) fflush(debug_log);
+    if (debug_fd >= 0) sceIoSync(debug_fd, 0);
+
+    debugPrintf("=== CRITICAL CALL STARTING ===\n");
+
+    // GTA SA Vita approach: Try with NULL parameters first (safer)
+    debugPrintf("Attempting call with NULL parameters...\n");
+    init_func(NULL, NULL);
+    debugPrintf("=== CRITICAL CALL COMPLETED ===\n");
+
+    // If we get here, it returned
+    function_returned = 1;
+    debugPrintf("✓ Function returned successfully!\n");
+
+    // Green screen - success
+    glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    vglSwapBuffers(GL_FALSE);
+
+    debugPrintf("=== GAME INITIALIZATION COMPLETE ===\n");
+
+    // Simple wait loop
     debugPrintf("Press START+SELECT to exit...\n");
-    int wait_count = 0;
     while (1) {
         SceCtrlData pad;
         sceCtrlPeekBufferPositive(0, &pad, 1);
 
-        // Exit on Start+Select
         if ((pad.buttons & SCE_CTRL_START) && (pad.buttons & SCE_CTRL_SELECT)) {
-            debugPrintf("Exit requested by user\n");
             break;
         }
 
-        wait_count++;
-        if (wait_count % 300 == 0) { // Every 5 seconds
-            debugPrintf("Waiting for exit command... (%d seconds)\n", wait_count / 60);
-        }
-
-        sceKernelDelayThread(16666); // ~60 FPS
+        sceKernelDelayThread(16666);
     }
 
     // Cleanup
-    debugPrintf("=== CLEANUP ===\n");
     if (debug_log) fclose(debug_log);
     if (debug_fd >= 0) sceIoClose(debug_fd);
 
